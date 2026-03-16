@@ -25,6 +25,7 @@ export default function ProjectsPage() {
   const [phaseFilter, setPhaseFilter] = useState<string>("ALL");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [newPhase, setNewPhase] = useState<string>("DESIGN");
 
   const { data: projects, isLoading } = useQuery<Project[]>({
     queryKey: ["/api/projects"],
@@ -64,7 +65,7 @@ export default function ProjectsPage() {
       description: formData.get("description") as string,
       clientName: formData.get("clientName") as string,
       address: formData.get("address") as string,
-      currentPhase: formData.get("currentPhase") as string,
+      currentPhase: newPhase,
       status: "ACTIVE",
     });
   };
@@ -120,7 +121,7 @@ export default function ProjectsPage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="currentPhase">시작 단계</Label>
-                  <Select name="currentPhase" defaultValue="DESIGN">
+                  <Select value={newPhase} onValueChange={setNewPhase}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>

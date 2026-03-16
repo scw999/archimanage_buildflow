@@ -27,7 +27,7 @@ export default function Dashboard() {
             <h1 className="text-2xl font-bold">대시보드</h1>
             <p className="text-muted-foreground text-sm">프로젝트 현황을 한눈에 확인하세요</p>
           </div>
-          <Button onClick={() => setLocation("/projects/new")} data-testid="new-project-button">
+          <Button onClick={() => setLocation("/projects")} data-testid="new-project-button">
             <Plus className="w-4 h-4 mr-2" />
             새 프로젝트
           </Button>
