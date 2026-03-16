@@ -10,6 +10,7 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 import NotFound from "@/pages/not-found";
 import LoginPage from "@/pages/login";
 import DashboardPage from "@/pages/dashboard";
+import ProjectsPage from "@/pages/projects";
 import ProjectDetailPage from "@/pages/project-detail";
 import ClientDashboardPage from "@/pages/client-dashboard";
 import ClientProjectPage from "@/pages/client-project";
@@ -53,6 +54,7 @@ function AppRouter() {
       <Switch>
         <Route path="/login" component={LoginPage} />
         <Route path="/" component={DashboardPage} />
+        <Route path="/projects" component={ProjectsPage} />
         <Route path="/projects/:id" component={ProjectDetailPage} />
         <Route path="/client" component={ClientDashboardPage} />
         <Route path="/client/projects/:id" component={ClientProjectPage} />
