@@ -1422,20 +1422,85 @@ function FilesTab({ projectId, currentPhase }: { projectId: string; currentPhase
 // ─── Photos Tab (페이즈별 폴더트리) ─────────────────────────
 function PhotosTab({ projectId, currentPhase }: { projectId: string; currentPhase: string }) {
   const { toast } = useToast();
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [urlDialogOpen, setUrlDialogOpen] = useState(false);
   const [lightbox, setLightbox] = useState<Photo | null>(null);
   const [expandedPhase, setExpandedPhase] = useState<string | null>(currentPhase);
   const [expandedSub, setExpandedSub] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [uploadPhase, setUploadPhase] = useState(currentPhase);
   const { data: photos } = useQuery<Photo[]>({ queryKey: [`/api/projects/${projectId}/photos`] });
 
-  const mutation = useMutation({
+  const urlMutation = useMutation({
     mutationFn: async (data: any) => { await apiRequest("POST", `/api/projects/${projectId}/photos`, data); },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/photos`] }); toast({ title: "사진이 추가되었습니다" }); setDialogOpen(false); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/photos`] }); toast({ title: "사진이 추가되었습니다" }); setUrlDialogOpen(false); },
   });
+
+  // File upload handler
+  const handleFileUpload = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const fileInput = e.currentTarget.querySelector('input[type="file"]') as HTMLInputElement;
+    if (!fileInput?.files?.length) { toast({ title: "파일을 선택해주세요", variant: "destructive" }); return; }
+
+    setUploading(true);
+    const uploadData = new FormData();
+    for (const file of Array.from(fileInput.files)) {
+      uploadData.append("photos", file);
+    }
+    uploadData.append("phase", fd.get("phase") as string);
+    uploadData.append("subCategory", fd.get("subCategory") as string);
+
+    try {
+      const token = (window as any).__authToken;
+      const headers: Record<string, string> = {};
+      // Get token from queryClient default options
+      const stored = document.cookie.match(/token=([^;]+)/);
+      const res = await fetch(`/api/projects/${projectId}/photos/upload`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${(await import("@/lib/queryClient")).getAuthToken()}` },
+        body: uploadData,
+      });
+      if (!res.ok) throw new Error(await res.text());
+      queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/photos`] });
+      toast({ title: `${fileInput.files.length}장의 사진이 업로드되었습니다` });
+      setUploadDialogOpen(false);
+    } catch (err: any) {
+      toast({ title: "업로드 실패", description: err.message, variant: "destructive" });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // ZIP download
+  const handleDownloadZip = async () => {
+    setDownloading(true);
+    try {
+      const { getAuthToken } = await import("@/lib/queryClient");
+      const res = await fetch(`/api/projects/${projectId}/photos/download-zip`, {
+        headers: { Authorization: `Bearer ${getAuthToken()}` },
+      });
+      if (!res.ok) throw new Error("다운로드 실패");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `photos.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast({ title: "ZIP 다운로드가 시작되었습니다" });
+    } catch (err: any) {
+      toast({ title: "다운로드 실패", description: err.message, variant: "destructive" });
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   const phases = ["DESIGN", "PERMIT", "CONSTRUCTION", "COMPLETION", "PORTFOLIO"];
 
-  // Group photos by phase, then by subCategory
   const photosByPhase: Record<string, Record<string, Photo[]>> = {};
   phases.forEach((phase) => {
     const phasePhotos = photos?.filter((p) => p.phase === phase) ?? [];
@@ -1449,52 +1514,84 @@ function PhotosTab({ projectId, currentPhase }: { projectId: string; currentPhas
   });
 
   const totalByPhase = (phase: string) => photos?.filter((p) => p.phase === phase).length ?? 0;
+  const totalPhotos = photos?.length ?? 0;
 
   return (
     <div className="space-y-4" data-testid="photos-tab">
-      <div className="flex justify-between items-center">
-        <h3 className="text-lg font-semibold flex items-center gap-2"><Camera className="w-5 h-5" /> 사진</h3>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild><Button size="sm"><Plus className="w-4 h-4 mr-1" />추가</Button></DialogTrigger>
-          <DialogContent>
-            <DialogHeader><DialogTitle>사진 추가</DialogTitle></DialogHeader>
-            <form onSubmit={(e) => {
-              e.preventDefault(); const fd = new FormData(e.currentTarget);
-              const phase = fd.get("phase") as string;
-              mutation.mutate({
-                phase, imageUrl: fd.get("imageUrl"), thumbnailUrl: fd.get("imageUrl"),
-                description: fd.get("description") || null, tags: fd.get("tags") || null,
-                takenAt: fd.get("takenAt") || new Date().toISOString().split("T")[0],
-                subCategory: fd.get("subCategory") || null,
-              });
-            }} className="space-y-4">
-              <div className="space-y-2"><Label>이미지 URL</Label><Input name="imageUrl" type="url" required /></div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2"><Label>페이즈</Label>
-                  <select name="phase" id="photo-phase" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" defaultValue={currentPhase}
-                    onChange={(e) => {
-                      // Reset sub category when phase changes
-                      const subSelect = document.getElementById("photo-sub") as HTMLSelectElement;
-                      if (subSelect) subSelect.value = "";
-                    }}>
-                    {phases.map((p) => <option key={p} value={p}>{getPhaseLabel(p)}</option>)}
-                  </select>
+      <div className="flex justify-between items-center flex-wrap gap-2">
+        <h3 className="text-lg font-semibold flex items-center gap-2">
+          <Camera className="w-5 h-5" /> 사진 <span className="text-sm font-normal text-muted-foreground">({totalPhotos}장)</span>
+        </h3>
+        <div className="flex gap-2">
+          {totalPhotos > 0 && (
+            <Button size="sm" variant="outline" onClick={handleDownloadZip} disabled={downloading}>
+              {downloading ? "다운로드 중..." : "ZIP 다운로드"}
+            </Button>
+          )}
+          <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+            <DialogTrigger asChild><Button size="sm"><Plus className="w-4 h-4 mr-1" />사진 업로드</Button></DialogTrigger>
+            <DialogContent>
+              <DialogHeader><DialogTitle>사진 파일 업로드</DialogTitle></DialogHeader>
+              <form onSubmit={handleFileUpload} className="space-y-4">
+                <div className="space-y-2">
+                  <Label>사진 파일 (여러 장 선택 가능)</Label>
+                  <Input type="file" accept="image/*" multiple required className="cursor-pointer" />
+                  <p className="text-xs text-muted-foreground">최대 20장, 각 20MB 이하</p>
                 </div>
-                <div className="space-y-2"><Label>세부 단계</Label>
-                  <select name="subCategory" id="photo-sub" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
-                    <option value="">선택...</option>
-                    {(PHOTO_SUB_CATEGORIES[currentPhase] || []).map((s) => <option key={s} value={s}>{s}</option>)}
-                  </select>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2"><Label>페이즈</Label>
+                    <select name="phase" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      value={uploadPhase} onChange={(e) => setUploadPhase(e.target.value)}>
+                      {phases.map((p) => <option key={p} value={p}>{getPhaseLabel(p)}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-2"><Label>세부 단계</Label>
+                    <select name="subCategory" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+                      <option value="">선택...</option>
+                      {(PHOTO_SUB_CATEGORIES[uploadPhase] || []).map((s) => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
                 </div>
-              </div>
-              <div className="space-y-2"><Label>설명</Label><Input name="description" /></div>
-              <div className="space-y-2"><Label>태그 (쉼표 구분)</Label><Input name="tags" placeholder="기초,공사" /></div>
-              <div className="space-y-2"><Label>촬영일</Label><Input name="takenAt" type="date" /></div>
-              <p className="text-xs text-muted-foreground">* 사진 이름은 업로드 날짜 기준으로 자동 생성됩니다</p>
-              <Button type="submit" disabled={mutation.isPending}>저장</Button>
-            </form>
-          </DialogContent>
-        </Dialog>
+                <Button type="submit" disabled={uploading} className="w-full">
+                  {uploading ? "업로드 중..." : "업로드"}
+                </Button>
+              </form>
+            </DialogContent>
+          </Dialog>
+          <Dialog open={urlDialogOpen} onOpenChange={setUrlDialogOpen}>
+            <DialogTrigger asChild><Button size="sm" variant="outline">URL 추가</Button></DialogTrigger>
+            <DialogContent>
+              <DialogHeader><DialogTitle>사진 URL 추가</DialogTitle></DialogHeader>
+              <form onSubmit={(e) => {
+                e.preventDefault(); const fd = new FormData(e.currentTarget);
+                urlMutation.mutate({
+                  phase: fd.get("phase"), imageUrl: fd.get("imageUrl"), thumbnailUrl: fd.get("imageUrl"),
+                  description: fd.get("description") || null, tags: fd.get("tags") || null,
+                  takenAt: fd.get("takenAt") || new Date().toISOString().split("T")[0],
+                  subCategory: fd.get("subCategory") || null,
+                });
+              }} className="space-y-4">
+                <div className="space-y-2"><Label>이미지 URL</Label><Input name="imageUrl" type="url" required /></div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2"><Label>페이즈</Label>
+                    <select name="phase" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" defaultValue={currentPhase}>
+                      {phases.map((p) => <option key={p} value={p}>{getPhaseLabel(p)}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-2"><Label>세부 단계</Label>
+                    <select name="subCategory" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+                      <option value="">선택...</option>
+                      {(PHOTO_SUB_CATEGORIES[currentPhase] || []).map((s) => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div className="space-y-2"><Label>설명</Label><Input name="description" /></div>
+                <div className="space-y-2"><Label>촬영일</Label><Input name="takenAt" type="date" /></div>
+                <Button type="submit" disabled={urlMutation.isPending}>저장</Button>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {/* Folder tree view */}

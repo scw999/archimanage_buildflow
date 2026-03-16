@@ -3,6 +3,30 @@ import { type Server } from "http";
 import { storage } from "./storage";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import multer from "multer";
+import archiver from "archiver";
+import path from "path";
+import fs from "fs";
+
+const UPLOAD_DIR = path.join(process.cwd(), "uploads", "photos");
+if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
+    filename: (_req, file, cb) => {
+      const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+      const rand = Math.random().toString(36).slice(2, 8);
+      const ext = path.extname(file.originalname) || ".jpg";
+      cb(null, `${date}_${rand}${ext}`);
+    },
+  }),
+  limits: { fileSize: 20 * 1024 * 1024 }, // 20MB
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith("image/")) cb(null, true);
+    else cb(new Error("이미지 파일만 업로드 가능합니다") as any, false);
+  },
+});
 
 const JWT_SECRET = process.env.JWT_SECRET || "buildflow-dev-secret";
 
@@ -191,6 +215,88 @@ export async function registerRoutes(
     const userId = (req as any).userId;
     const photo = await storage.createPhoto({ ...req.body, projectId: req.params.id, createdBy: userId });
     return res.json(photo);
+  });
+
+  // Photo file upload
+  app.post("/api/projects/:id/photos/upload", authMiddleware, upload.array("photos", 20), async (req: Request, res: Response) => {
+    const userId = (req as any).userId;
+    const files = req.files as Express.Multer.File[];
+    if (!files || files.length === 0) return res.status(400).json({ message: "파일이 없습니다" });
+
+    const { phase, subCategory } = req.body;
+    const results = [];
+    for (const file of files) {
+      const imageUrl = `/uploads/photos/${file.filename}`;
+      const takenAt = new Date().toISOString().slice(0, 10);
+      const photo = await storage.createPhoto({
+        projectId: req.params.id,
+        phase: phase || "CONSTRUCTION",
+        imageUrl,
+        thumbnailUrl: imageUrl,
+        description: file.originalname,
+        tags: null,
+        takenAt,
+        subCategory: subCategory || null,
+        createdBy: userId,
+      });
+      results.push(photo);
+    }
+    return res.json(results);
+  });
+
+  // Photo ZIP download
+  app.get("/api/projects/:id/photos/download-zip", authMiddleware, async (req: Request, res: Response) => {
+    const project = await storage.getProject(req.params.id);
+    if (!project) return res.status(404).json({ message: "프로젝트를 찾을 수 없습니다" });
+
+    const photos = await storage.getPhotosByProject(req.params.id);
+    if (!photos.length) return res.status(404).json({ message: "사진이 없습니다" });
+
+    const phaseLabels: Record<string, string> = {
+      DESIGN: "01_설계", PERMIT: "02_인허가", CONSTRUCTION: "03_시공",
+      COMPLETION: "04_준공", PORTFOLIO: "05_포트폴리오",
+    };
+
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(project.name)}_photos.zip"`);
+
+    const archive = archiver("zip", { zlib: { level: 5 } });
+    archive.pipe(res);
+
+    // Group photos and add to archive
+    const counters: Record<string, number> = {};
+    for (const photo of photos) {
+      const phaseFolder = phaseLabels[photo.phase] || photo.phase;
+      const subFolder = (photo as any).subCategory || "기타";
+      const folderPath = `${phaseFolder}/${subFolder}`;
+      const key = folderPath;
+      counters[key] = (counters[key] || 0) + 1;
+
+      const date = photo.takenAt || new Date().toISOString().slice(0, 10);
+      const ext = path.extname(photo.imageUrl) || ".jpg";
+      const fileName = `${subFolder}_${date}_${counters[key]}${ext}`;
+
+      // Check if it's a local file
+      if (photo.imageUrl.startsWith("/uploads/")) {
+        const filePath = path.join(process.cwd(), photo.imageUrl);
+        if (fs.existsSync(filePath)) {
+          archive.file(filePath, { name: `${folderPath}/${fileName}` });
+        }
+      } else {
+        // External URL - fetch and add
+        try {
+          const response = await fetch(photo.imageUrl);
+          if (response.ok) {
+            const buffer = Buffer.from(await response.arrayBuffer());
+            archive.append(buffer, { name: `${folderPath}/${fileName}` });
+          }
+        } catch {
+          // Skip failed downloads
+        }
+      }
+    }
+
+    await archive.finalize();
   });
 
   // Client Requests

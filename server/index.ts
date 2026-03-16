@@ -3,6 +3,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { autoMigrate } from "./auto-migrate";
+import path from "path";
 
 const app = express();
 const httpServer = createServer(app);
@@ -63,6 +64,9 @@ app.use((req, res, next) => {
 (async () => {
   // Auto-migrate DB tables and seed admin user on startup
   await autoMigrate();
+
+  // Serve uploaded files
+  app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
   await registerRoutes(httpServer, app);
 
