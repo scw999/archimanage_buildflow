@@ -20,7 +20,8 @@ import {
   MapPin, User, ExternalLink, X,
   Cloud, Users, CheckCircle2, ClipboardList,
   HardHat, AlertTriangle, Search, MessageSquare,
-  FolderTree, ChevronDown, ChevronRight, Building2, Ruler, Layers, Trash2
+  FolderTree, ChevronDown, ChevronRight, Building2, Ruler, Layers, Trash2,
+  ArrowUp, ArrowDown, Pencil
 } from "lucide-react";
 import type {
   Project, Schedule, DailyLog, File as ProjectFile, Photo,
@@ -89,9 +90,12 @@ const PHOTO_SUB_CATEGORIES: Record<string, string[]> = {
   DESIGN: ["현황사진", "컨셉이미지", "모델링", "기타"],
   PERMIT: ["인허가서류", "현장사진", "기타"],
   CONSTRUCTION: [
-    "가설공사", "토공사", "기초공사", "골조공사", "방수공사",
-    "전기공사", "설비공사", "창호공사", "외부마감", "내부마감",
-    "타일공사", "도장공사", "목공사", "조경공사", "전경", "기타",
+    "가설공사", "토공사", "기초공사",
+    "골조공사-지하", "골조공사-1층", "골조공사-2층", "골조공사-3층",
+    "골조공사-4층", "골조공사-5층이상", "골조공사-옥상",
+    "방수공사", "전기공사", "설비공사", "창호공사",
+    "외부마감", "내부마감", "타일공사", "도장공사",
+    "목공사", "조경공사", "전경", "기타",
   ],
   COMPLETION: ["최종검수", "하자보수", "준공사진", "기타"],
   PORTFOLIO: ["외관", "내부", "디테일", "야간", "드론", "기타"],
@@ -811,6 +815,7 @@ function ConstructionTab({ projectId }: { projectId: string }) {
   const [expandedInsp, setExpandedInsp] = useState<string | null>(null);
   const [expandedDefect, setExpandedDefect] = useState<string | null>(null);
   const [localProgress, setLocalProgress] = useState<Record<string, number>>({});
+  const [editTask, setEditTask] = useState<ConstructionTask | null>(null);
 
   const { data: tasks } = useQuery<ConstructionTask[]>({ queryKey: [`/api/projects/${projectId}/construction-tasks`] });
   const { data: inspections } = useQuery<Inspection[]>({ queryKey: [`/api/projects/${projectId}/inspections`] });
@@ -845,6 +850,22 @@ function ConstructionTab({ projectId }: { projectId: string }) {
     mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/construction-tasks/${id}`); },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/construction-tasks`] }); toast({ title: "공정이 삭제되었습니다" }); },
   });
+
+  const reorderMutation = useMutation({
+    mutationFn: async (orderedIds: string[]) => { await apiRequest("PATCH", `/api/projects/${projectId}/construction-tasks/reorder`, { orderedIds }); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/construction-tasks`] }); },
+  });
+
+  const moveTask = (taskId: string, direction: "up" | "down") => {
+    const sorted = [...sortedTasks];
+    const idx = sorted.findIndex((t) => t.id === taskId);
+    if (direction === "up" && idx > 0) {
+      [sorted[idx], sorted[idx - 1]] = [sorted[idx - 1], sorted[idx]];
+    } else if (direction === "down" && idx < sorted.length - 1) {
+      [sorted[idx], sorted[idx + 1]] = [sorted[idx + 1], sorted[idx]];
+    } else return;
+    reorderMutation.mutate(sorted.map((t) => t.id));
+  };
 
   const checkMutation = useMutation({
     mutationFn: async (data: any) => { await apiRequest("POST", `/api/projects/${projectId}/design-checks`, data); },
@@ -1067,10 +1088,18 @@ function ConstructionTab({ projectId }: { projectId: string }) {
                           <option value="NOT_STARTED">미착수</option><option value="IN_PROGRESS">진행중</option>
                           <option value="COMPLETED">완료</option><option value="DELAYED">지연</option>
                         </select>
+                      </div>
+                      <div className="flex items-center gap-1 pt-1">
+                        <span className="text-xs text-muted-foreground mr-1">순서:</span>
+                        <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => moveTask(task.id, "up")}
+                          disabled={sortedTasks[0]?.id === task.id}><ArrowUp className="w-3 h-3" /></Button>
+                        <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => moveTask(task.id, "down")}
+                          disabled={sortedTasks[sortedTasks.length - 1]?.id === task.id}><ArrowDown className="w-3 h-3" /></Button>
+                        <Button variant="outline" size="icon" className="h-7 w-7 ml-2" onClick={() => setEditTask(task)}>
+                          <Pencil className="w-3 h-3" /></Button>
                         <Button variant="ghost" size="icon" className="h-7 w-7 ml-auto text-destructive hover:text-destructive"
                           onClick={() => { if (confirm("이 공정을 삭제하시겠습니까?")) deleteTaskMutation.mutate(task.id); }}>
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                          <Trash2 className="w-4 h-4" /></Button>
                       </div>
                     </div>
                   )}
@@ -1212,6 +1241,42 @@ function ConstructionTab({ projectId }: { projectId: string }) {
 
       {/* 건축주 요청사항 (시공 단계) */}
       <RequestsSection projectId={projectId} phase="CONSTRUCTION" />
+
+      {/* 공정 수정 다이얼로그 */}
+      {editTask && (
+        <Dialog open onOpenChange={() => setEditTask(null)}>
+          <DialogContent>
+            <DialogHeader><DialogTitle>공정 수정</DialogTitle></DialogHeader>
+            <form onSubmit={(e) => {
+              e.preventDefault(); const fd = new FormData(e.currentTarget);
+              updateTaskMutation.mutate({
+                id: editTask.id,
+                data: {
+                  title: fd.get("title"), description: fd.get("description") || null,
+                  category: fd.get("category"), assignee: fd.get("assignee") || null,
+                  startDate: fd.get("startDate") || null, endDate: fd.get("endDate") || null,
+                },
+              });
+              setEditTask(null);
+              toast({ title: "공정이 수정되었습니다" });
+            }} className="space-y-4">
+              <div className="space-y-2"><Label>공종</Label>
+                <select name="category" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" defaultValue={editTask.category}>
+                  {CONSTRUCTION_CATEGORIES.map((c) => (<option key={c.value} value={c.value}>{c.label}</option>))}
+                </select>
+              </div>
+              <div className="space-y-2"><Label>공정명</Label><Input name="title" required defaultValue={editTask.title} /></div>
+              <div className="space-y-2"><Label>설명</Label><Textarea name="description" defaultValue={editTask.description || ""} /></div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2"><Label>시작일</Label><DateInput name="startDate" defaultValue={editTask.startDate || ""} /></div>
+                <div className="space-y-2"><Label>종료일</Label><DateInput name="endDate" defaultValue={editTask.endDate || ""} /></div>
+              </div>
+              <div className="space-y-2"><Label>담당</Label><Input name="assignee" defaultValue={editTask.assignee || ""} /></div>
+              <Button type="submit">저장</Button>
+            </form>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

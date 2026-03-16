@@ -7,21 +7,11 @@ import multer from "multer";
 import archiver from "archiver";
 import path from "path";
 import fs from "fs";
-
-const UPLOAD_DIR = path.join(process.cwd(), "uploads", "photos");
-if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+import { uploadFile, getFileBuffer, isR2Enabled } from "./r2";
 
 const upload = multer({
-  storage: multer.diskStorage({
-    destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
-    filename: (_req, file, cb) => {
-      const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-      const rand = Math.random().toString(36).slice(2, 8);
-      const ext = path.extname(file.originalname) || ".jpg";
-      cb(null, `${date}_${rand}${ext}`);
-    },
-  }),
-  limits: { fileSize: 20 * 1024 * 1024 }, // 20MB
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     if (file.mimetype.startsWith("image/")) cb(null, true);
     else cb(new Error("이미지 파일만 업로드 가능합니다") as any, false);
@@ -217,7 +207,7 @@ export async function registerRoutes(
     return res.json(photo);
   });
 
-  // Photo file upload
+  // Photo file upload (R2 or local)
   app.post("/api/projects/:id/photos/upload", authMiddleware, upload.array("photos", 20), async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const files = req.files as Express.Multer.File[];
@@ -226,7 +216,12 @@ export async function registerRoutes(
     const { phase, subCategory } = req.body;
     const results = [];
     for (const file of files) {
-      const imageUrl = `/uploads/photos/${file.filename}`;
+      const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+      const rand = Math.random().toString(36).slice(2, 8);
+      const ext = path.extname(file.originalname) || ".jpg";
+      const fileName = `${date}_${rand}${ext}`;
+
+      const imageUrl = await uploadFile(fileName, file.buffer, file.mimetype);
       const takenAt = new Date().toISOString().slice(0, 10);
       const photo = await storage.createPhoto({
         projectId: req.params.id,
@@ -242,6 +237,17 @@ export async function registerRoutes(
       results.push(photo);
     }
     return res.json(results);
+  });
+
+  // Serve R2 files via proxy (when no public URL configured)
+  app.get("/api/photos/file/:key", async (req: Request, res: Response) => {
+    const buffer = await getFileBuffer(req.params.key);
+    if (!buffer) return res.status(404).json({ message: "파일을 찾을 수 없습니다" });
+    const ext = path.extname(req.params.key).toLowerCase();
+    const mimeMap: Record<string, string> = { ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".gif": "image/gif", ".webp": "image/webp" };
+    res.setHeader("Content-Type", mimeMap[ext] || "image/jpeg");
+    res.setHeader("Cache-Control", "public, max-age=31536000");
+    return res.send(buffer);
   });
 
   // Photo ZIP download
@@ -276,12 +282,17 @@ export async function registerRoutes(
       const ext = path.extname(photo.imageUrl) || ".jpg";
       const fileName = `${subFolder}_${date}_${counters[key]}${ext}`;
 
-      // Check if it's a local file
+      // Get file content
       if (photo.imageUrl.startsWith("/uploads/")) {
         const filePath = path.join(process.cwd(), photo.imageUrl);
         if (fs.existsSync(filePath)) {
           archive.file(filePath, { name: `${folderPath}/${fileName}` });
         }
+      } else if (photo.imageUrl.startsWith("/api/photos/file/")) {
+        // R2 stored file
+        const r2Key = photo.imageUrl.replace("/api/photos/file/", "");
+        const buffer = await getFileBuffer(r2Key);
+        if (buffer) archive.append(buffer, { name: `${folderPath}/${fileName}` });
       } else {
         // External URL - fetch and add
         try {
@@ -417,6 +428,16 @@ export async function registerRoutes(
       results.push(task);
     }
     return res.json(results);
+  });
+
+  // Reorder construction tasks
+  app.patch("/api/projects/:id/construction-tasks/reorder", authMiddleware, async (req: Request, res: Response) => {
+    const { orderedIds } = req.body;
+    if (!Array.isArray(orderedIds)) return res.status(400).json({ message: "orderedIds 배열이 필요합니다" });
+    for (let i = 0; i < orderedIds.length; i++) {
+      await storage.updateConstructionTask(orderedIds[i], { sortOrder: i + 1 });
+    }
+    return res.json({ ok: true });
   });
 
   app.patch("/api/construction-tasks/:id", authMiddleware, async (req: Request, res: Response) => {
