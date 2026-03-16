@@ -35,6 +35,14 @@ export async function autoMigrate() {
         current_phase TEXT NOT NULL,
         status TEXT NOT NULL,
         cover_image_url TEXT,
+        building_area TEXT,
+        total_floor_area TEXT,
+        building_coverage TEXT,
+        floor_area_ratio TEXT,
+        floors TEXT,
+        structure_type TEXT,
+        main_use TEXT,
+        special_notes TEXT,
         created_by VARCHAR,
         created_at TIMESTAMP DEFAULT NOW()
       );
@@ -170,6 +178,28 @@ export async function autoMigrate() {
         resolved_at TIMESTAMP
       );
     `);
+    // Add new columns to existing projects table (idempotent)
+    const newCols = [
+      "building_area TEXT", "total_floor_area TEXT", "building_coverage TEXT",
+      "floor_area_ratio TEXT", "floors TEXT", "structure_type TEXT",
+      "main_use TEXT", "special_notes TEXT",
+    ];
+    for (const col of newCols) {
+      const colName = col.split(" ")[0];
+      try {
+        await db.execute(sql.raw(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS ${col}`));
+      } catch {
+        // column may already exist
+      }
+    }
+
+    // Add sub_category to photos table
+    try {
+      await db.execute(sql.raw(`ALTER TABLE photos ADD COLUMN IF NOT EXISTS sub_category TEXT`));
+    } catch {
+      // column may already exist
+    }
+
     console.log("[auto-migrate] Tables created/verified");
 
     // Seed admin user if not exists

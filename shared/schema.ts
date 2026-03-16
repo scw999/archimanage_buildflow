@@ -46,6 +46,14 @@ export const projects = pgTable("projects", {
   currentPhase: text("current_phase").notNull().$type<typeof ProjectPhase[number]>(),
   status: text("status").notNull().$type<typeof ProjectStatus[number]>(),
   coverImageUrl: text("cover_image_url"),
+  buildingArea: text("building_area"),
+  totalFloorArea: text("total_floor_area"),
+  buildingCoverage: text("building_coverage"),
+  floorAreaRatio: text("floor_area_ratio"),
+  floors: text("floors"),
+  structureType: text("structure_type"),
+  mainUse: text("main_use"),
+  specialNotes: text("special_notes"),
   createdBy: varchar("created_by"),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -58,6 +66,14 @@ export const insertProjectSchema = createInsertSchema(projects).pick({
   currentPhase: true,
   status: true,
   coverImageUrl: true,
+  buildingArea: true,
+  totalFloorArea: true,
+  buildingCoverage: true,
+  floorAreaRatio: true,
+  floors: true,
+  structureType: true,
+  mainUse: true,
+  specialNotes: true,
   createdBy: true,
 });
 
@@ -168,6 +184,7 @@ export const photos = pgTable("photos", {
   description: text("description"),
   tags: text("tags"),
   takenAt: text("taken_at"),
+  subCategory: text("sub_category"),
   createdBy: varchar("created_by"),
 });
 
@@ -179,6 +196,7 @@ export const insertPhotoSchema = createInsertSchema(photos).pick({
   description: true,
   tags: true,
   takenAt: true,
+  subCategory: true,
   createdBy: true,
 });
 

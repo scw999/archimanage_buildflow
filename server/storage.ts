@@ -165,6 +165,14 @@ export class MemStorage implements IStorage {
       currentPhase: "CONSTRUCTION",
       status: "ACTIVE",
       coverImageUrl: null,
+      buildingArea: "198.5",
+      totalFloorArea: "595.2",
+      buildingCoverage: "59.8",
+      floorAreaRatio: "179.4",
+      floors: "지하1층 / 지상3층",
+      structureType: "철근콘크리트조",
+      mainUse: "단독주택",
+      specialNotes: "자연 채광 극대화 설계, 에너지 효율 1등급 목표",
       createdBy: adminId,
       createdAt: new Date("2024-01-15"),
     });
@@ -178,6 +186,14 @@ export class MemStorage implements IStorage {
       currentPhase: "DESIGN",
       status: "ACTIVE",
       coverImageUrl: null,
+      buildingArea: "85.0",
+      totalFloorArea: "85.0",
+      buildingCoverage: null,
+      floorAreaRatio: null,
+      floors: "지상1층",
+      structureType: "철골조",
+      mainUse: "근린생활시설(카페)",
+      specialNotes: "모던 인더스트리얼 컨셉, 좌석 40석 규모",
       createdBy: adminId,
       createdAt: new Date("2024-06-01"),
     });
@@ -244,10 +260,10 @@ export class MemStorage implements IStorage {
 
     // Photos
     const photoData: Array<Omit<Photo, "id">> = [
-      { projectId: proj1Id, phase: "CONSTRUCTION", imageUrl: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=800", thumbnailUrl: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=200", description: "기초 공사 현장", tags: "기초,공사,현장", takenAt: "2024-09-01", createdBy: adminId },
-      { projectId: proj1Id, phase: "CONSTRUCTION", imageUrl: "https://images.unsplash.com/photo-1541888946425-d81bb19240f5?w=800", thumbnailUrl: "https://images.unsplash.com/photo-1541888946425-d81bb19240f5?w=200", description: "골조 공사 진행 중", tags: "골조,철근", takenAt: "2024-09-15", createdBy: adminId },
-      { projectId: proj1Id, phase: "CONSTRUCTION", imageUrl: "https://images.unsplash.com/photo-1503387762-592deb58ef4e?w=800", thumbnailUrl: "https://images.unsplash.com/photo-1503387762-592deb58ef4e?w=200", description: "현장 전경", tags: "전경,외부", takenAt: "2024-10-01", createdBy: adminId },
-      { projectId: proj2Id, phase: "DESIGN", imageUrl: "https://images.unsplash.com/photo-1497366216548-37526070297c?w=800", thumbnailUrl: "https://images.unsplash.com/photo-1497366216548-37526070297c?w=200", description: "기존 카페 공간", tags: "기존,현황", takenAt: "2024-06-15", createdBy: adminId },
+      { projectId: proj1Id, phase: "CONSTRUCTION", imageUrl: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=800", thumbnailUrl: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=200", description: "기초 공사 현장", tags: "기초,공사,현장", takenAt: "2024-09-01", subCategory: "기초공사", createdBy: adminId },
+      { projectId: proj1Id, phase: "CONSTRUCTION", imageUrl: "https://images.unsplash.com/photo-1541888946425-d81bb19240f5?w=800", thumbnailUrl: "https://images.unsplash.com/photo-1541888946425-d81bb19240f5?w=200", description: "골조 공사 진행 중", tags: "골조,철근", takenAt: "2024-09-15", subCategory: "골조공사", createdBy: adminId },
+      { projectId: proj1Id, phase: "CONSTRUCTION", imageUrl: "https://images.unsplash.com/photo-1503387762-592deb58ef4e?w=800", thumbnailUrl: "https://images.unsplash.com/photo-1503387762-592deb58ef4e?w=200", description: "현장 전경", tags: "전경,외부", takenAt: "2024-10-01", subCategory: "전경", createdBy: adminId },
+      { projectId: proj2Id, phase: "DESIGN", imageUrl: "https://images.unsplash.com/photo-1497366216548-37526070297c?w=800", thumbnailUrl: "https://images.unsplash.com/photo-1497366216548-37526070297c?w=200", description: "기존 카페 공간", tags: "기존,현황", takenAt: "2024-06-15", subCategory: "현황사진", createdBy: adminId },
     ];
 
     photoData.forEach((p, i) => {
@@ -404,7 +420,7 @@ export class MemStorage implements IStorage {
 
   async createProject(insertProject: InsertProject): Promise<Project> {
     const id = randomUUID();
-    const project: Project = { id, createdAt: new Date(), coverImageUrl: null, description: null, clientName: null, address: null, createdBy: null, ...insertProject };
+    const project: Project = { id, createdAt: new Date(), coverImageUrl: null, description: null, clientName: null, address: null, createdBy: null, buildingArea: null, totalFloorArea: null, buildingCoverage: null, floorAreaRatio: null, floors: null, structureType: null, mainUse: null, specialNotes: null, ...insertProject };
     this.projects.set(id, project);
     return project;
   }
@@ -486,7 +502,7 @@ export class MemStorage implements IStorage {
 
   async createPhoto(insertPhoto: InsertPhoto): Promise<Photo> {
     const id = randomUUID();
-    const photo: Photo = { id, thumbnailUrl: null, description: null, tags: null, takenAt: null, createdBy: null, ...insertPhoto };
+    const photo: Photo = { id, thumbnailUrl: null, description: null, tags: null, takenAt: null, subCategory: null, createdBy: null, ...insertPhoto };
     this.photos.set(id, photo);
     return photo;
   }
