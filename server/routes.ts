@@ -300,6 +300,19 @@ export async function registerRoutes(
     return res.json(task);
   });
 
+  // Bulk create construction tasks
+  app.post("/api/projects/:id/construction-tasks/bulk", authMiddleware, async (req: Request, res: Response) => {
+    const userId = (req as any).userId;
+    const { tasks } = req.body;
+    if (!Array.isArray(tasks)) return res.status(400).json({ message: "tasks 배열이 필요합니다" });
+    const results = [];
+    for (const t of tasks) {
+      const task = await storage.createConstructionTask({ ...t, projectId: req.params.id, createdBy: userId });
+      results.push(task);
+    }
+    return res.json(results);
+  });
+
   app.patch("/api/construction-tasks/:id", authMiddleware, async (req: Request, res: Response) => {
     const task = await storage.updateConstructionTask(req.params.id, req.body);
     if (!task) return res.status(404).json({ message: "공정을 찾을 수 없습니다" });

@@ -19,7 +19,7 @@ import {
   MapPin, User, ExternalLink, X,
   Cloud, Users, CheckCircle2, ClipboardList,
   HardHat, AlertTriangle, Search, MessageSquare,
-  FolderTree, ChevronDown, ChevronRight, Building2, Ruler, Layers
+  FolderTree, ChevronDown, ChevronRight, Building2, Ruler, Layers, Trash2
 } from "lucide-react";
 import type {
   Project, Schedule, DailyLog, File as ProjectFile, Photo,
@@ -668,7 +668,133 @@ function DesignTab({ projectId }: { projectId: string }) {
           )}
         </CardContent>
       </Card>
+
+      {/* 건축주 요청사항 (설계 단계) */}
+      <RequestsSection projectId={projectId} phase="DESIGN" />
     </div>
+  );
+}
+
+// ─── Shared Requests Section ─────────────────────────────────
+function RequestsSection({ projectId, phase }: { projectId: string; phase: string }) {
+  const { toast } = useToast();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [expandedReq, setExpandedReq] = useState<string | null>(null);
+
+  const { data: allRequests } = useQuery<ClientRequest[]>({ queryKey: [`/api/projects/${projectId}/requests`] });
+  const requests = allRequests?.filter((r) => r.phase === phase) ?? [];
+  const { data: comments } = useQuery<Comment[]>({
+    queryKey: [`/api/requests/${expandedReq}/comments`],
+    enabled: !!expandedReq,
+  });
+
+  const requestMutation = useMutation({
+    mutationFn: async (data: any) => { await apiRequest("POST", `/api/projects/${projectId}/requests`, data); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/requests`] }); toast({ title: "요청사항이 등록되었습니다" }); setDialogOpen(false); },
+  });
+
+  const updateRequestMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: any }) => { await apiRequest("PATCH", `/api/requests/${id}`, data); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/requests`] }); },
+  });
+
+  const commentMutation = useMutation({
+    mutationFn: async ({ requestId, content }: { requestId: string; content: string }) => {
+      await apiRequest("POST", `/api/requests/${requestId}/comments`, { content });
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/requests/${expandedReq}/comments`] }); },
+  });
+
+  const resolved = requests.filter((r) => r.status === "RESOLVED").length;
+  const phaseLabel = phase === "DESIGN" ? "설계" : phase === "CONSTRUCTION" ? "시공" : getPhaseLabel(phase);
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <CardTitle className="flex items-center gap-2">
+          <MessageSquare className="w-5 h-5" /> 건축주 요청사항 ({phaseLabel}) <span className="text-sm font-normal text-muted-foreground">{resolved}/{requests.length} 해결</span>
+        </CardTitle>
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogTrigger asChild><Button size="sm"><Plus className="w-4 h-4 mr-1" />요청 등록</Button></DialogTrigger>
+          <DialogContent>
+            <DialogHeader><DialogTitle>요청사항 등록 ({phaseLabel} 단계)</DialogTitle></DialogHeader>
+            <form onSubmit={(e) => {
+              e.preventDefault(); const fd = new FormData(e.currentTarget);
+              requestMutation.mutate({
+                phase, title: fd.get("title"), content: fd.get("content"),
+                category: fd.get("category"), priority: fd.get("priority"), status: "NEW",
+              });
+            }} className="space-y-4">
+              <div className="space-y-2"><Label>제목</Label><Input name="title" required /></div>
+              <div className="space-y-2"><Label>내용</Label><Textarea name="content" required /></div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2"><Label>분류</Label>
+                  <select name="category" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" defaultValue="OTHER">
+                    <option value="DESIGN_CHANGE">설계변경</option><option value="MATERIAL_CHANGE">자재변경</option>
+                    <option value="ADDITIONAL_WORK">추가공사</option><option value="SCHEDULE_CHANGE">일정변경</option><option value="OTHER">기타</option>
+                  </select>
+                </div>
+                <div className="space-y-2"><Label>우선순위</Label>
+                  <select name="priority" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" defaultValue="NORMAL">
+                    <option value="URGENT">긴급</option><option value="HIGH">높음</option>
+                    <option value="NORMAL">보통</option><option value="LOW">낮음</option>
+                  </select>
+                </div>
+              </div>
+              <Button type="submit" disabled={requestMutation.isPending}>등록</Button>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </CardHeader>
+      <CardContent>
+        {!requests.length ? (
+          <p className="text-sm text-muted-foreground text-center py-4">등록된 요청사항이 없습니다</p>
+        ) : (
+          <div className="space-y-2">
+            {requests.map((req) => (
+              <div key={req.id} className="p-3 rounded-lg border">
+                <div className="cursor-pointer" onClick={() => setExpandedReq(expandedReq === req.id ? null : req.id)}>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {expandedReq === req.id ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                    <span className="text-sm font-medium">{req.title}</span>
+                    <Badge variant="outline" className={getRequestStatusColor(req.status)}>{getRequestStatusLabel(req.status)}</Badge>
+                    <Badge variant="outline" className="text-xs">{getRequestPriorityLabel(req.priority)}</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1 line-clamp-1 ml-6">{req.content}</p>
+                </div>
+                {expandedReq === req.id && (
+                  <div className="mt-3 pt-3 border-t space-y-3 ml-6">
+                    <p className="text-sm">{req.content}</p>
+                    <div className="flex items-center gap-2">
+                      <Label className="text-xs">상태:</Label>
+                      <select value={req.status} onChange={(e) => updateRequestMutation.mutate({ id: req.id, data: { status: e.target.value } })}
+                        className="rounded-md border border-input bg-background px-2 py-1 text-xs">
+                        <option value="NEW">신규</option><option value="REVIEWING">검토중</option><option value="IN_PROGRESS">진행중</option>
+                        <option value="RESOLVED">해결</option><option value="ON_HOLD">보류</option><option value="REJECTED">반려</option>
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold">댓글</p>
+                      {comments?.map((c) => (
+                        <div key={c.id} className="p-2 bg-muted/50 rounded text-xs">{c.content}</div>
+                      ))}
+                      <form onSubmit={(e) => {
+                        e.preventDefault(); const fd = new FormData(e.currentTarget);
+                        const content = fd.get("comment") as string;
+                        if (content) { commentMutation.mutate({ requestId: req.id, content }); e.currentTarget.reset(); }
+                      }} className="flex gap-2">
+                        <Input name="comment" placeholder="댓글 입력..." className="h-8 text-xs" />
+                        <Button type="submit" size="sm" className="h-8">등록</Button>
+                      </form>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -676,18 +802,22 @@ function DesignTab({ projectId }: { projectId: string }) {
 function ConstructionTab({ projectId }: { projectId: string }) {
   const { toast } = useToast();
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
+  const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
   const [inspDialogOpen, setInspDialogOpen] = useState(false);
   const [defectDialogOpen, setDefectDialogOpen] = useState(false);
+  const [checkDialogOpen, setCheckDialogOpen] = useState(false);
   const [expandedTask, setExpandedTask] = useState<string | null>(null);
   const [expandedInsp, setExpandedInsp] = useState<string | null>(null);
   const [expandedDefect, setExpandedDefect] = useState<string | null>(null);
+  const [localProgress, setLocalProgress] = useState<Record<string, number>>({});
 
   const { data: tasks } = useQuery<ConstructionTask[]>({ queryKey: [`/api/projects/${projectId}/construction-tasks`] });
   const { data: inspections } = useQuery<Inspection[]>({ queryKey: [`/api/projects/${projectId}/inspections`] });
   const { data: defects } = useQuery<Defect[]>({ queryKey: [`/api/projects/${projectId}/defects`] });
   const { data: designChecks } = useQuery<DesignCheck[]>({ queryKey: [`/api/projects/${projectId}/design-checks`] });
 
-  const avgProgress = tasks?.length ? Math.round(tasks.reduce((sum, t) => sum + t.progress, 0) / tasks.length) : 0;
+  const getProgress = (task: ConstructionTask) => localProgress[task.id] ?? task.progress;
+  const avgProgress = tasks?.length ? Math.round(tasks.reduce((sum, t) => sum + getProgress(t), 0) / tasks.length) : 0;
   const statusCounts = {
     NOT_STARTED: tasks?.filter((t) => t.status === "NOT_STARTED").length ?? 0,
     IN_PROGRESS: tasks?.filter((t) => t.status === "IN_PROGRESS").length ?? 0,
@@ -700,9 +830,31 @@ function ConstructionTab({ projectId }: { projectId: string }) {
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/construction-tasks`] }); toast({ title: "공정이 추가되었습니다" }); setTaskDialogOpen(false); },
   });
 
+  const bulkTaskMutation = useMutation({
+    mutationFn: async (tasksData: any[]) => { await apiRequest("POST", `/api/projects/${projectId}/construction-tasks/bulk`, { tasks: tasksData }); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/construction-tasks`] }); toast({ title: "공정이 일괄 추가되었습니다" }); setBulkDialogOpen(false); },
+  });
+
   const updateTaskMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: any }) => { await apiRequest("PATCH", `/api/construction-tasks/${id}`, data); },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/construction-tasks`] }); },
+  });
+
+  const deleteTaskMutation = useMutation({
+    mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/construction-tasks/${id}`); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/construction-tasks`] }); toast({ title: "공정이 삭제되었습니다" }); },
+  });
+
+  const checkMutation = useMutation({
+    mutationFn: async (data: any) => { await apiRequest("POST", `/api/projects/${projectId}/design-checks`, data); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/design-checks`] }); toast({ title: "체크리스트 항목이 추가되었습니다" }); setCheckDialogOpen(false); },
+  });
+
+  const toggleCheckMutation = useMutation({
+    mutationFn: async ({ id, isCompleted }: { id: string; isCompleted: number }) => {
+      await apiRequest("PATCH", `/api/design-checks/${id}`, { isCompleted, completedAt: isCompleted ? new Date().toISOString() : null });
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/design-checks`] }); },
   });
 
   const inspMutation = useMutation({
@@ -726,9 +878,18 @@ function ConstructionTab({ projectId }: { projectId: string }) {
   });
 
   const sortedTasks = tasks ? [...tasks].sort((a, b) => a.sortOrder - b.sortOrder) : [];
-
-  // 설계 체크리스트 중 미완료 항목 → 시공 체크리스트
   const pendingDesignChecks = designChecks?.filter((c) => c.isCompleted === 0) ?? [];
+  const allChecks = designChecks ?? [];
+
+  // Bulk add handler
+  const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set());
+  const handleBulkAdd = () => {
+    const tasksData = Array.from(bulkSelected).map((cat, i) => ({
+      title: cat, category: cat, status: "NOT_STARTED", progress: 0,
+      sortOrder: (tasks?.length ?? 0) + i + 1,
+    }));
+    bulkTaskMutation.mutate(tasksData);
+  };
 
   return (
     <div className="space-y-6" data-testid="construction-tab">
@@ -748,76 +909,114 @@ function ConstructionTab({ projectId }: { projectId: string }) {
         </CardContent>
       </Card>
 
-      {/* 설계 확인사항 (자동 연동) */}
-      {pendingDesignChecks.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-orange-600">
-              <ClipboardList className="w-5 h-5" /> 설계 확인사항 ({pendingDesignChecks.length}건 미완료)
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xs text-muted-foreground mb-3">설계 탭의 체크리스트 중 미완료 항목이 자동으로 표시됩니다</p>
+      {/* 시공 체크리스트 */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <CheckCircle2 className="w-5 h-5" /> 시공 체크리스트
+          </CardTitle>
+          <Dialog open={checkDialogOpen} onOpenChange={setCheckDialogOpen}>
+            <DialogTrigger asChild><Button size="sm"><Plus className="w-4 h-4 mr-1" />추가</Button></DialogTrigger>
+            <DialogContent>
+              <DialogHeader><DialogTitle>체크리스트 항목 추가 (시공)</DialogTitle></DialogHeader>
+              <form onSubmit={(e) => {
+                e.preventDefault(); const fd = new FormData(e.currentTarget);
+                checkMutation.mutate({ category: fd.get("category"), title: fd.get("title"), memo: fd.get("memo") || null });
+              }} className="space-y-4">
+                <div className="space-y-2"><Label>카테고리</Label>
+                  <select name="category" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" defaultValue="ARCHITECTURE">
+                    <option value="ARCHITECTURE">건축</option><option value="STRUCTURE">구조</option><option value="MEP">기계/전기</option>
+                    <option value="INTERIOR">인테리어</option><option value="LANDSCAPE">조경</option><option value="PERMIT_DOC">인허가 서류</option>
+                  </select>
+                </div>
+                <div className="space-y-2"><Label>항목명</Label><Input name="title" required /></div>
+                <div className="space-y-2"><Label>메모</Label><Textarea name="memo" /></div>
+                <Button type="submit" disabled={checkMutation.isPending}>추가</Button>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </CardHeader>
+        <CardContent>
+          {allChecks.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">체크리스트 항목이 없습니다</p>
+          ) : (
             <div className="space-y-1">
-              {pendingDesignChecks.map((item) => (
-                <div key={item.id} className="flex items-center gap-3 p-2 rounded-lg bg-orange-50 dark:bg-orange-900/10">
-                  <span className="text-xs font-medium text-orange-600">[{getDesignCheckCategoryLabel(item.category)}]</span>
-                  <span className="text-sm flex-1">{item.title}</span>
+              {allChecks.map((item) => (
+                <div key={item.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50">
+                  <input type="checkbox" checked={item.isCompleted === 1}
+                    onChange={() => toggleCheckMutation.mutate({ id: item.id, isCompleted: item.isCompleted === 1 ? 0 : 1 })}
+                    className="w-4 h-4 rounded border-gray-300" />
+                  <span className="text-xs font-medium text-muted-foreground">[{getDesignCheckCategoryLabel(item.category)}]</span>
+                  <span className={`text-sm flex-1 ${item.isCompleted === 1 ? "line-through text-muted-foreground" : ""}`}>{item.title}</span>
                 </div>
               ))}
             </div>
-          </CardContent>
-        </Card>
-      )}
+          )}
+        </CardContent>
+      </Card>
 
       {/* 공정 목록 */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="flex items-center gap-2"><HardHat className="w-5 h-5" /> 공정 목록</CardTitle>
-          <Dialog open={taskDialogOpen} onOpenChange={setTaskDialogOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm"><Plus className="w-4 h-4 mr-1" />공정 추가</Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader><DialogTitle>공정 추가</DialogTitle></DialogHeader>
-              <form onSubmit={(e) => {
-                e.preventDefault();
-                const fd = new FormData(e.currentTarget);
-                taskMutation.mutate({
-                  title: fd.get("title"), description: fd.get("description") || null,
-                  category: fd.get("category"), status: "NOT_STARTED", progress: 0,
-                  startDate: fd.get("startDate") || null, endDate: fd.get("endDate") || null,
-                  assignee: fd.get("assignee") || null, sortOrder: (tasks?.length ?? 0) + 1,
-                });
-              }} className="space-y-4">
-                <div className="space-y-2">
-                  <Label>공종 (카테고리)</Label>
-                  <select name="category" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" defaultValue="기초공사">
-                    {CONSTRUCTION_CATEGORIES.map((c) => (
-                      <option key={c.value} value={c.value}>{c.label}</option>
-                    ))}
-                  </select>
+          <div className="flex gap-2">
+            <Dialog open={bulkDialogOpen} onOpenChange={(o) => { setBulkDialogOpen(o); if (!o) setBulkSelected(new Set()); }}>
+              <DialogTrigger asChild><Button size="sm" variant="outline">일괄 추가</Button></DialogTrigger>
+              <DialogContent className="max-h-[70vh] overflow-y-auto">
+                <DialogHeader><DialogTitle>공정 일괄 추가</DialogTitle></DialogHeader>
+                <p className="text-xs text-muted-foreground mb-3">추가할 공종을 선택하세요</p>
+                <div className="space-y-1">
+                  {CONSTRUCTION_CATEGORIES.map((c) => (
+                    <label key={c.value} className="flex items-center gap-2 p-2 rounded hover:bg-muted/50 cursor-pointer">
+                      <input type="checkbox" checked={bulkSelected.has(c.value)}
+                        onChange={(e) => {
+                          const next = new Set(bulkSelected);
+                          e.target.checked ? next.add(c.value) : next.delete(c.value);
+                          setBulkSelected(next);
+                        }} className="w-4 h-4" />
+                      <span className="text-sm">{c.label}</span>
+                    </label>
+                  ))}
                 </div>
-                <div className="space-y-2">
-                  <Label>공정명</Label>
-                  <Input name="title" required placeholder="예: 1층 기초 콘크리트 타설" />
+                <div className="flex gap-2 mt-4">
+                  <Button variant="outline" size="sm" onClick={() => setBulkSelected(new Set(CONSTRUCTION_CATEGORIES.map((c) => c.value)))}>전체 선택</Button>
+                  <Button variant="outline" size="sm" onClick={() => setBulkSelected(new Set())}>전체 해제</Button>
                 </div>
-                <div className="space-y-2">
-                  <Label>설명</Label>
-                  <Textarea name="description" />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2"><Label>시작일</Label><Input name="startDate" type="date" /></div>
-                  <div className="space-y-2"><Label>종료일</Label><Input name="endDate" type="date" /></div>
-                </div>
-                <div className="space-y-2">
-                  <Label>담당</Label>
-                  <Input name="assignee" />
-                </div>
-                <Button type="submit" disabled={taskMutation.isPending}>추가</Button>
-              </form>
-            </DialogContent>
-          </Dialog>
+                <Button onClick={handleBulkAdd} disabled={bulkSelected.size === 0 || bulkTaskMutation.isPending} className="w-full mt-2">
+                  {bulkSelected.size}개 공정 추가
+                </Button>
+              </DialogContent>
+            </Dialog>
+            <Dialog open={taskDialogOpen} onOpenChange={setTaskDialogOpen}>
+              <DialogTrigger asChild><Button size="sm"><Plus className="w-4 h-4 mr-1" />공정 추가</Button></DialogTrigger>
+              <DialogContent>
+                <DialogHeader><DialogTitle>공정 추가</DialogTitle></DialogHeader>
+                <form onSubmit={(e) => {
+                  e.preventDefault(); const fd = new FormData(e.currentTarget);
+                  taskMutation.mutate({
+                    title: fd.get("title"), description: fd.get("description") || null,
+                    category: fd.get("category"), status: "NOT_STARTED", progress: 0,
+                    startDate: fd.get("startDate") || null, endDate: fd.get("endDate") || null,
+                    assignee: fd.get("assignee") || null, sortOrder: (tasks?.length ?? 0) + 1,
+                  });
+                }} className="space-y-4">
+                  <div className="space-y-2"><Label>공종</Label>
+                    <select name="category" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" defaultValue="기초공사">
+                      {CONSTRUCTION_CATEGORIES.map((c) => (<option key={c.value} value={c.value}>{c.label}</option>))}
+                    </select>
+                  </div>
+                  <div className="space-y-2"><Label>공정명</Label><Input name="title" required placeholder="예: 1층 기초 콘크리트 타설" /></div>
+                  <div className="space-y-2"><Label>설명</Label><Textarea name="description" /></div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2"><Label>시작일</Label><Input name="startDate" type="date" /></div>
+                    <div className="space-y-2"><Label>종료일</Label><Input name="endDate" type="date" /></div>
+                  </div>
+                  <div className="space-y-2"><Label>담당</Label><Input name="assignee" /></div>
+                  <Button type="submit" disabled={taskMutation.isPending}>추가</Button>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </div>
         </CardHeader>
         <CardContent>
           {!sortedTasks.length ? (
@@ -835,18 +1034,30 @@ function ConstructionTab({ projectId }: { projectId: string }) {
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="flex-1 bg-muted rounded-full h-2">
-                        <div className={`h-2 rounded-full transition-all ${task.status === "DELAYED" ? "bg-red-500" : "bg-primary"}`} style={{ width: `${task.progress}%` }} />
+                        <div className={`h-2 rounded-full transition-all ${task.status === "DELAYED" ? "bg-red-500" : "bg-primary"}`} style={{ width: `${getProgress(task)}%` }} />
                       </div>
-                      <span className="text-xs font-medium w-10 text-right">{task.progress}%</span>
+                      <span className="text-xs font-medium w-10 text-right">{getProgress(task)}%</span>
                     </div>
                     {(task.startDate || task.endDate) && <p className="text-xs text-muted-foreground mt-1">{task.startDate} ~ {task.endDate}</p>}
                   </div>
                   {expandedTask === task.id && (
                     <div className="mt-3 pt-3 border-t space-y-3">
                       <div className="space-y-1">
-                        <Label className="text-xs">진행률: {task.progress}%</Label>
-                        <input type="range" min="0" max="100" value={task.progress}
-                          onChange={(e) => updateTaskMutation.mutate({ id: task.id, data: { progress: parseInt(e.target.value) } })} className="w-full" />
+                        <Label className="text-xs">진행률: {getProgress(task)}%</Label>
+                        <input type="range" min="0" max="100" value={getProgress(task)}
+                          onChange={(e) => {
+                            const v = parseInt(e.target.value);
+                            setLocalProgress((prev) => ({ ...prev, [task.id]: v }));
+                          }}
+                          onMouseUp={(e) => {
+                            const v = parseInt((e.target as HTMLInputElement).value);
+                            updateTaskMutation.mutate({ id: task.id, data: { progress: v } });
+                          }}
+                          onTouchEnd={(e) => {
+                            const v = parseInt((e.target as HTMLInputElement).value);
+                            updateTaskMutation.mutate({ id: task.id, data: { progress: v } });
+                          }}
+                          className="w-full" />
                       </div>
                       <div className="flex items-center gap-2">
                         <Label className="text-xs">상태:</Label>
@@ -855,6 +1066,10 @@ function ConstructionTab({ projectId }: { projectId: string }) {
                           <option value="NOT_STARTED">미착수</option><option value="IN_PROGRESS">진행중</option>
                           <option value="COMPLETED">완료</option><option value="DELAYED">지연</option>
                         </select>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 ml-auto text-destructive hover:text-destructive"
+                          onClick={() => { if (confirm("이 공정을 삭제하시겠습니까?")) deleteTaskMutation.mutate(task.id); }}>
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
                       </div>
                     </div>
                   )}
@@ -993,137 +1208,9 @@ function ConstructionTab({ projectId }: { projectId: string }) {
           )}
         </CardContent>
       </Card>
-    </div>
-  );
-}
 
-// ─── Requests Tab (건축주 요청사항) ──────────────────────────
-function RequestsTab({ projectId, currentPhase }: { projectId: string; currentPhase: string }) {
-  const { toast } = useToast();
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [expandedReq, setExpandedReq] = useState<string | null>(null);
-
-  const { data: requests } = useQuery<ClientRequest[]>({ queryKey: [`/api/projects/${projectId}/requests`] });
-  const { data: comments } = useQuery<Comment[]>({
-    queryKey: [`/api/requests/${expandedReq}/comments`],
-    enabled: !!expandedReq,
-  });
-
-  const requestMutation = useMutation({
-    mutationFn: async (data: any) => { await apiRequest("POST", `/api/projects/${projectId}/requests`, data); },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/requests`] }); toast({ title: "요청사항이 등록되었습니다" }); setDialogOpen(false); },
-  });
-
-  const updateRequestMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: any }) => { await apiRequest("PATCH", `/api/requests/${id}`, data); },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/requests`] }); },
-  });
-
-  const commentMutation = useMutation({
-    mutationFn: async ({ requestId, content }: { requestId: string; content: string }) => {
-      await apiRequest("POST", `/api/requests/${requestId}/comments`, { content });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/requests/${expandedReq}/comments`] });
-      toast({ title: "댓글이 등록되었습니다" });
-    },
-  });
-
-  const resolved = requests?.filter((r) => r.status === "RESOLVED").length ?? 0;
-  const total = requests?.length ?? 0;
-
-  return (
-    <div className="space-y-4" data-testid="requests-tab">
-      <div className="flex justify-between items-center">
-        <div>
-          <h3 className="text-lg font-semibold flex items-center gap-2">
-            <MessageSquare className="w-5 h-5" /> 건축주 요청사항
-          </h3>
-          <p className="text-xs text-muted-foreground">{resolved}/{total} 해결</p>
-        </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild><Button size="sm"><Plus className="w-4 h-4 mr-1" />요청 등록</Button></DialogTrigger>
-          <DialogContent>
-            <DialogHeader><DialogTitle>요청사항 등록</DialogTitle></DialogHeader>
-            <form onSubmit={(e) => {
-              e.preventDefault(); const fd = new FormData(e.currentTarget);
-              requestMutation.mutate({
-                phase: currentPhase, title: fd.get("title"), content: fd.get("content"),
-                category: fd.get("category"), priority: fd.get("priority"), status: "NEW",
-              });
-            }} className="space-y-4">
-              <div className="space-y-2"><Label>제목</Label><Input name="title" required /></div>
-              <div className="space-y-2"><Label>내용</Label><Textarea name="content" required /></div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2"><Label>분류</Label>
-                  <select name="category" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" defaultValue="OTHER">
-                    <option value="DESIGN_CHANGE">설계변경</option><option value="MATERIAL_CHANGE">자재변경</option>
-                    <option value="ADDITIONAL_WORK">추가공사</option><option value="SCHEDULE_CHANGE">일정변경</option><option value="OTHER">기타</option>
-                  </select>
-                </div>
-                <div className="space-y-2"><Label>우선순위</Label>
-                  <select name="priority" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" defaultValue="NORMAL">
-                    <option value="URGENT">긴급</option><option value="HIGH">높음</option>
-                    <option value="NORMAL">보통</option><option value="LOW">낮음</option>
-                  </select>
-                </div>
-              </div>
-              <Button type="submit" disabled={requestMutation.isPending}>등록</Button>
-            </form>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      {!requests?.length ? (
-        <p className="text-sm text-muted-foreground text-center py-8">등록된 요청사항이 없습니다</p>
-      ) : (
-        <div className="space-y-3">
-          {requests.map((req) => (
-            <Card key={req.id}>
-              <CardContent className="py-3">
-                <div className="cursor-pointer" onClick={() => setExpandedReq(expandedReq === req.id ? null : req.id)}>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {expandedReq === req.id ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                    <span className="text-sm font-medium">{req.title}</span>
-                    <Badge variant="outline" className={getRequestStatusColor(req.status)}>{getRequestStatusLabel(req.status)}</Badge>
-                    <Badge variant="outline" className="text-xs">{getRequestPriorityLabel(req.priority)}</Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1 line-clamp-1 ml-6">{req.content}</p>
-                </div>
-
-                {expandedReq === req.id && (
-                  <div className="mt-3 pt-3 border-t space-y-3 ml-6">
-                    <p className="text-sm">{req.content}</p>
-                    <div className="flex items-center gap-2">
-                      <Label className="text-xs">상태:</Label>
-                      <select value={req.status} onChange={(e) => updateRequestMutation.mutate({ id: req.id, data: { status: e.target.value } })}
-                        className="rounded-md border border-input bg-background px-2 py-1 text-xs">
-                        <option value="NEW">신규</option><option value="REVIEWING">검토중</option><option value="IN_PROGRESS">진행중</option>
-                        <option value="RESOLVED">해결</option><option value="ON_HOLD">보류</option><option value="REJECTED">반려</option>
-                      </select>
-                    </div>
-                    {/* Comments */}
-                    <div className="space-y-2">
-                      <p className="text-xs font-semibold">댓글</p>
-                      {comments?.map((c) => (
-                        <div key={c.id} className="p-2 bg-muted/50 rounded text-xs">{c.content}</div>
-                      ))}
-                      <form onSubmit={(e) => {
-                        e.preventDefault(); const fd = new FormData(e.currentTarget);
-                        const content = fd.get("comment") as string;
-                        if (content) { commentMutation.mutate({ requestId: req.id, content }); e.currentTarget.reset(); }
-                      }} className="flex gap-2">
-                        <Input name="comment" placeholder="댓글 입력..." className="h-8 text-xs" />
-                        <Button type="submit" size="sm" className="h-8">등록</Button>
-                      </form>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+      {/* 건축주 요청사항 (시공 단계) */}
+      <RequestsSection projectId={projectId} phase="CONSTRUCTION" />
     </div>
   );
 }
@@ -1538,7 +1625,6 @@ export default function ProjectDetail() {
             <TabsTrigger value="overview">개요</TabsTrigger>
             <TabsTrigger value="design">설계</TabsTrigger>
             <TabsTrigger value="construction">시공</TabsTrigger>
-            <TabsTrigger value="requests">요청사항</TabsTrigger>
             <TabsTrigger value="schedule">일정</TabsTrigger>
             <TabsTrigger value="files">파일</TabsTrigger>
             <TabsTrigger value="photos">사진</TabsTrigger>
@@ -1546,7 +1632,6 @@ export default function ProjectDetail() {
           <TabsContent value="overview"><OverviewTab project={project} /></TabsContent>
           <TabsContent value="design"><DesignTab projectId={project.id} /></TabsContent>
           <TabsContent value="construction"><ConstructionTab projectId={project.id} /></TabsContent>
-          <TabsContent value="requests"><RequestsTab projectId={project.id} currentPhase={project.currentPhase} /></TabsContent>
           <TabsContent value="schedule"><ScheduleTab projectId={project.id} currentPhase={project.currentPhase} /></TabsContent>
           <TabsContent value="files"><FilesTab projectId={project.id} currentPhase={project.currentPhase} /></TabsContent>
           <TabsContent value="photos"><PhotosTab projectId={project.id} currentPhase={project.currentPhase} /></TabsContent>
