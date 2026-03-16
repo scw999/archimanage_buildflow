@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRoute } from "wouter";
 import { AppLayout } from "@/components/app-layout";
@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
+import { DateInput } from "@/components/date-input";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
   Plus, Calendar, FileText, Camera,
@@ -1008,8 +1009,8 @@ function ConstructionTab({ projectId }: { projectId: string }) {
                   <div className="space-y-2"><Label>공정명</Label><Input name="title" required placeholder="예: 1층 기초 콘크리트 타설" /></div>
                   <div className="space-y-2"><Label>설명</Label><Textarea name="description" /></div>
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2"><Label>시작일</Label><Input name="startDate" type="date" /></div>
-                    <div className="space-y-2"><Label>종료일</Label><Input name="endDate" type="date" /></div>
+                    <div className="space-y-2"><Label>시작일</Label><DateInput name="startDate" /></div>
+                    <div className="space-y-2"><Label>종료일</Label><DateInput name="endDate" /></div>
                   </div>
                   <div className="space-y-2"><Label>담당</Label><Input name="assignee" /></div>
                   <Button type="submit" disabled={taskMutation.isPending}>추가</Button>
@@ -1094,7 +1095,7 @@ function ConstructionTab({ projectId }: { projectId: string }) {
               }} className="space-y-4">
                 <div className="space-y-2"><Label>검수명</Label><Input name="title" required /></div>
                 <div className="space-y-2"><Label>분류</Label><Input name="category" required placeholder="예: 구조검사, 방수검사" /></div>
-                <div className="space-y-2"><Label>예정일</Label><Input name="scheduledDate" type="date" /></div>
+                <div className="space-y-2"><Label>예정일</Label><DateInput name="scheduledDate" /></div>
                 <div className="space-y-2"><Label>검사자</Label><Input name="inspector" /></div>
                 <Button type="submit" disabled={inspMutation.isPending}>추가</Button>
               </form>
@@ -1131,7 +1132,7 @@ function ConstructionTab({ projectId }: { projectId: string }) {
                         </select>
                       </div>
                       <div className="space-y-1"><Label className="text-xs">완료일</Label>
-                        <Input type="date" defaultValue={insp.completedDate || ""} onChange={(e) => updateInspMutation.mutate({ id: insp.id, data: { completedDate: e.target.value || null } })} className="h-8 text-xs" />
+                        <DateInput defaultValue={insp.completedDate || ""} onChange={(e) => updateInspMutation.mutate({ id: insp.id, data: { completedDate: e.target.value || null } })} className="h-8 text-xs" />
                       </div>
                       <div className="space-y-1"><Label className="text-xs">검사 소견</Label>
                         <Textarea defaultValue={insp.findings || ""} onBlur={(e) => updateInspMutation.mutate({ id: insp.id, data: { findings: e.target.value || null } })} className="text-xs min-h-[60px]" />
@@ -1266,7 +1267,7 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
                 <div className="space-y-2"><Label>제목</Label>
                   <Input name="title" required defaultValue={presetData?.title || ""} key={selectedPreset} />
                 </div>
-                <div className="space-y-2"><Label>날짜</Label><Input name="date" type="date" required /></div>
+                <div className="space-y-2"><Label>날짜</Label><DateInput name="date" required /></div>
                 <div className="space-y-2"><Label>카테고리</Label>
                   <select name="category" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                     defaultValue={presetData?.category || "MEETING"} key={`cat-${selectedPreset}`}>
@@ -1316,7 +1317,7 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
                   weather: fd.get("weather") || null, workers: fd.get("workers") ? parseInt(fd.get("workers") as string) : null,
                 });
               }} className="space-y-4">
-                <div className="space-y-2"><Label>날짜</Label><Input name="date" type="date" required /></div>
+                <div className="space-y-2"><Label>날짜</Label><DateInput name="date" required /></div>
                 <div className="space-y-2"><Label>내용</Label><Textarea name="content" required /></div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2"><Label>날씨</Label><Input name="weather" placeholder="맑음" /></div>
@@ -1430,7 +1431,57 @@ function PhotosTab({ projectId, currentPhase }: { projectId: string; currentPhas
   const [uploading, setUploading] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [uploadPhase, setUploadPhase] = useState(currentPhase);
+  const [pastedFile, setPastedFile] = useState<File | null>(null);
   const { data: photos } = useQuery<Photo[]>({ queryKey: [`/api/projects/${projectId}/photos`] });
+
+  // Clipboard paste handler
+  const handlePaste = useCallback(async (e: ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of Array.from(items)) {
+      if (item.type.startsWith("image/")) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (file) {
+          setPastedFile(file);
+          setUploadDialogOpen(true);
+        }
+        break;
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    document.addEventListener("paste", handlePaste);
+    return () => document.removeEventListener("paste", handlePaste);
+  }, [handlePaste]);
+
+  // Upload pasted file
+  const uploadPastedFile = async (phase: string, subCategory: string) => {
+    if (!pastedFile) return;
+    setUploading(true);
+    try {
+      const uploadData = new FormData();
+      uploadData.append("photos", pastedFile);
+      uploadData.append("phase", phase);
+      if (subCategory) uploadData.append("subCategory", subCategory);
+      const { getAuthToken } = await import("@/lib/queryClient");
+      const res = await fetch(`/api/projects/${projectId}/photos/upload`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${getAuthToken()}` },
+        body: uploadData,
+      });
+      if (!res.ok) throw new Error(await res.text());
+      queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/photos`] });
+      toast({ title: "붙여넣기 사진이 업로드되었습니다" });
+      setPastedFile(null);
+      setUploadDialogOpen(false);
+    } catch (err: any) {
+      toast({ title: "업로드 실패", description: err.message, variant: "destructive" });
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const urlMutation = useMutation({
     mutationFn: async (data: any) => { await apiRequest("POST", `/api/projects/${projectId}/photos`, data); },
@@ -1528,34 +1579,63 @@ function PhotosTab({ projectId, currentPhase }: { projectId: string; currentPhas
               {downloading ? "다운로드 중..." : "ZIP 다운로드"}
             </Button>
           )}
-          <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+          <Dialog open={uploadDialogOpen} onOpenChange={(o) => { setUploadDialogOpen(o); if (!o) setPastedFile(null); }}>
             <DialogTrigger asChild><Button size="sm"><Plus className="w-4 h-4 mr-1" />사진 업로드</Button></DialogTrigger>
             <DialogContent>
-              <DialogHeader><DialogTitle>사진 파일 업로드</DialogTitle></DialogHeader>
-              <form onSubmit={handleFileUpload} className="space-y-4">
-                <div className="space-y-2">
-                  <Label>사진 파일 (여러 장 선택 가능)</Label>
-                  <Input type="file" accept="image/*" multiple required className="cursor-pointer" />
-                  <p className="text-xs text-muted-foreground">최대 20장, 각 20MB 이하</p>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2"><Label>페이즈</Label>
-                    <select name="phase" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                      value={uploadPhase} onChange={(e) => setUploadPhase(e.target.value)}>
-                      {phases.map((p) => <option key={p} value={p}>{getPhaseLabel(p)}</option>)}
-                    </select>
+              <DialogHeader><DialogTitle>{pastedFile ? "붙여넣기 사진 업로드" : "사진 파일 업로드"}</DialogTitle></DialogHeader>
+              {pastedFile ? (
+                <div className="space-y-4">
+                  <div className="border rounded-lg overflow-hidden max-h-48 flex items-center justify-center bg-muted">
+                    <img src={URL.createObjectURL(pastedFile)} alt="미리보기" className="max-h-48 object-contain" />
                   </div>
-                  <div className="space-y-2"><Label>세부 단계</Label>
-                    <select name="subCategory" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
-                      <option value="">선택...</option>
-                      {(PHOTO_SUB_CATEGORIES[uploadPhase] || []).map((s) => <option key={s} value={s}>{s}</option>)}
-                    </select>
+                  <p className="text-xs text-muted-foreground text-center">클립보드에서 붙여넣은 이미지</p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2"><Label>페이즈</Label>
+                      <select id="paste-phase" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        value={uploadPhase} onChange={(e) => setUploadPhase(e.target.value)}>
+                        {phases.map((p) => <option key={p} value={p}>{getPhaseLabel(p)}</option>)}
+                      </select>
+                    </div>
+                    <div className="space-y-2"><Label>세부 단계</Label>
+                      <select id="paste-sub" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+                        <option value="">선택...</option>
+                        {(PHOTO_SUB_CATEGORIES[uploadPhase] || []).map((s) => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </div>
                   </div>
+                  <Button onClick={() => {
+                    const sub = (document.getElementById("paste-sub") as HTMLSelectElement)?.value || "";
+                    uploadPastedFile(uploadPhase, sub);
+                  }} disabled={uploading} className="w-full">
+                    {uploading ? "업로드 중..." : "업로드"}
+                  </Button>
                 </div>
-                <Button type="submit" disabled={uploading} className="w-full">
-                  {uploading ? "업로드 중..." : "업로드"}
-                </Button>
-              </form>
+              ) : (
+                <form onSubmit={handleFileUpload} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>사진 파일 (여러 장 선택 가능)</Label>
+                    <Input type="file" accept="image/*" multiple required className="cursor-pointer" />
+                    <p className="text-xs text-muted-foreground">최대 20장, 각 20MB 이하. Ctrl+V로 이미지 붙여넣기도 가능합니다.</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2"><Label>페이즈</Label>
+                      <select name="phase" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        value={uploadPhase} onChange={(e) => setUploadPhase(e.target.value)}>
+                        {phases.map((p) => <option key={p} value={p}>{getPhaseLabel(p)}</option>)}
+                      </select>
+                    </div>
+                    <div className="space-y-2"><Label>세부 단계</Label>
+                      <select name="subCategory" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+                        <option value="">선택...</option>
+                        {(PHOTO_SUB_CATEGORIES[uploadPhase] || []).map((s) => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <Button type="submit" disabled={uploading} className="w-full">
+                    {uploading ? "업로드 중..." : "업로드"}
+                  </Button>
+                </form>
+              )}
             </DialogContent>
           </Dialog>
           <Dialog open={urlDialogOpen} onOpenChange={setUrlDialogOpen}>
@@ -1586,7 +1666,7 @@ function PhotosTab({ projectId, currentPhase }: { projectId: string; currentPhas
                   </div>
                 </div>
                 <div className="space-y-2"><Label>설명</Label><Input name="description" /></div>
-                <div className="space-y-2"><Label>촬영일</Label><Input name="takenAt" type="date" /></div>
+                <div className="space-y-2"><Label>촬영일</Label><DateInput name="takenAt" /></div>
                 <Button type="submit" disabled={urlMutation.isPending}>저장</Button>
               </form>
             </DialogContent>
