@@ -31,6 +31,7 @@ import type {
   DesignChange, DesignCheck, ConstructionTask, Inspection, Defect,
   ClientRequest, Comment,
 } from "@shared/schema";
+import { ConstructionCheckCategory } from "@shared/schema";
 
 // ─── Preset Data ─────────────────────────────────────────────
 const CONSTRUCTION_CATEGORIES = [
@@ -471,7 +472,8 @@ function DesignTab({ projectId }: { projectId: string }) {
   const [changeDialogOpen, setChangeDialogOpen] = useState(false);
   const [selectedChange, setSelectedChange] = useState<DesignChange | null>(null);
 
-  const { data: designChecks } = useQuery<DesignCheck[]>({ queryKey: [`/api/projects/${projectId}/design-checks`] });
+  const { data: allDesignChecks } = useQuery<DesignCheck[]>({ queryKey: [`/api/projects/${projectId}/design-checks`] });
+  const designChecks = allDesignChecks?.filter((c) => (c as any).phase === "DESIGN" || !(c as any).phase) ?? [];
   const { data: designChanges } = useQuery<DesignChange[]>({ queryKey: [`/api/projects/${projectId}/design-changes`] });
   const { data: files } = useQuery<ProjectFile[]>({ queryKey: [`/api/projects/${projectId}/files`] });
 
@@ -490,6 +492,11 @@ function DesignTab({ projectId }: { projectId: string }) {
     mutationFn: async ({ id, isCompleted }: { id: string; isCompleted: number }) => {
       await apiRequest("PATCH", `/api/design-checks/${id}`, { isCompleted, completedAt: isCompleted ? new Date().toISOString() : null });
     },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/design-checks`] }); },
+  });
+
+  const updateCheckMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: any }) => { await apiRequest("PATCH", `/api/design-checks/${id}`, data); },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/design-checks`] }); },
   });
 
@@ -537,7 +544,11 @@ function DesignTab({ projectId }: { projectId: string }) {
               <form onSubmit={(e) => {
                 e.preventDefault();
                 const fd = new FormData(e.currentTarget);
-                checkMutation.mutate({ category: fd.get("category"), title: fd.get("title"), memo: fd.get("memo") || null });
+                checkMutation.mutate({
+                  phase: "DESIGN", category: fd.get("category"), title: fd.get("title"),
+                  memo: fd.get("memo") || null,
+                  linkedToConstruction: fd.get("linkedToConstruction") ? 1 : 0,
+                });
               }} className="space-y-4">
                 <div className="space-y-2">
                   <Label>카테고리</Label>
@@ -558,7 +569,10 @@ function DesignTab({ projectId }: { projectId: string }) {
                   <Label>메모</Label>
                   <Textarea name="memo" />
                 </div>
-                <p className="text-xs text-muted-foreground">* 설계 체크리스트 항목은 시공 탭의 체크리스트에도 자동으로 표시됩니다</p>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" name="linkedToConstruction" value="1" className="w-4 h-4" />
+                  <span className="text-sm">시공 단계 체크리스트에도 자동 생성</span>
+                </label>
                 <Button type="submit" disabled={checkMutation.isPending}>추가</Button>
               </form>
             </DialogContent>
@@ -572,14 +586,21 @@ function DesignTab({ projectId }: { projectId: string }) {
               {Object.entries(grouped).map(([cat, items]) => (
                 <div key={cat}>
                   <h4 className="text-sm font-semibold text-muted-foreground mb-2">{getDesignCheckCategoryLabel(cat)}</h4>
-                  <div className="space-y-1">
+                  <div className="space-y-2">
                     {items.map((item) => (
-                      <div key={item.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50">
-                        <input type="checkbox" checked={item.isCompleted === 1}
-                          onChange={() => toggleCheckMutation.mutate({ id: item.id, isCompleted: item.isCompleted === 1 ? 0 : 1 })}
-                          className="w-4 h-4 rounded border-gray-300" />
-                        <span className={`text-sm flex-1 ${item.isCompleted === 1 ? "line-through text-muted-foreground" : ""}`}>{item.title}</span>
-                        {item.memo && <span className="text-xs text-muted-foreground">{item.memo}</span>}
+                      <div key={item.id} className="p-3 rounded-lg border hover:bg-muted/30">
+                        <div className="flex items-start gap-3">
+                          <input type="checkbox" checked={item.isCompleted === 1}
+                            onChange={() => toggleCheckMutation.mutate({ id: item.id, isCompleted: item.isCompleted === 1 ? 0 : 1 })}
+                            className="w-4 h-4 rounded border-gray-300 mt-0.5 shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className={`text-sm font-medium ${item.isCompleted === 1 ? "line-through text-muted-foreground" : ""}`}>{item.title}</span>
+                              {(item as any).linkedToConstruction === 1 && <Badge variant="outline" className="text-[10px] px-1">시공연동</Badge>}
+                            </div>
+                            {item.memo && <p className="text-sm text-muted-foreground mt-1">{item.memo}</p>}
+                          </div>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -701,6 +722,7 @@ function RequestsSection({ projectId, phase }: { projectId: string; phase: strin
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [expandedReq, setExpandedReq] = useState<string | null>(null);
+  const [uploadingReq, setUploadingReq] = useState(false);
 
   const { data: allRequests } = useQuery<ClientRequest[]>({ queryKey: [`/api/projects/${projectId}/requests`] });
   const requests = allRequests?.filter((r) => r.phase === phase) ?? [];
@@ -725,6 +747,47 @@ function RequestsSection({ projectId, phase }: { projectId: string; phase: strin
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/requests/${expandedReq}/comments`] }); },
   });
+
+  // File upload for request attachments
+  const handleReqFileUpload = async (reqId: string, files: FileList) => {
+    setUploadingReq(true);
+    try {
+      const fd = new FormData();
+      for (const f of Array.from(files)) fd.append("photos", f);
+      fd.append("phase", phase);
+      fd.append("subCategory", "요청첨부");
+      const { getAuthToken } = await import("@/lib/queryClient");
+      const res = await fetch(`/api/projects/${projectId}/photos/upload`, {
+        method: "POST", headers: { Authorization: `Bearer ${getAuthToken()}` }, body: fd,
+      });
+      if (!res.ok) throw new Error("업로드 실패");
+      const uploaded = await res.json();
+      const urls = uploaded.map((p: any) => p.imageUrl);
+      const req = requests.find((r) => r.id === reqId);
+      const existing = (req as any)?.attachments ? JSON.parse((req as any).attachments) : [];
+      updateRequestMutation.mutate({ id: reqId, data: { attachments: JSON.stringify([...existing, ...urls]) } });
+      toast({ title: "파일이 첨부되었습니다" });
+    } catch { toast({ title: "업로드 실패", variant: "destructive" }); }
+    finally { setUploadingReq(false); }
+  };
+
+  // Paste handler for requests
+  const handleReqPaste = async (e: React.ClipboardEvent, reqId: string) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of Array.from(items)) {
+      if (item.type.startsWith("image/")) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (file) {
+          const dt = new DataTransfer();
+          dt.items.add(file);
+          await handleReqFileUpload(reqId, dt.files);
+        }
+        break;
+      }
+    }
+  };
 
   const resolved = requests.filter((r) => r.status === "RESOLVED").length;
   const phaseLabel = phase === "DESIGN" ? "설계" : phase === "CONSTRUCTION" ? "시공" : getPhaseLabel(phase);
@@ -772,46 +835,65 @@ function RequestsSection({ projectId, phase }: { projectId: string; phase: strin
           <p className="text-sm text-muted-foreground text-center py-4">등록된 요청사항이 없습니다</p>
         ) : (
           <div className="space-y-2">
-            {requests.map((req) => (
-              <div key={req.id} className="p-3 rounded-lg border">
-                <div className="cursor-pointer" onClick={() => setExpandedReq(expandedReq === req.id ? null : req.id)}>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {expandedReq === req.id ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                    <span className="text-sm font-medium">{req.title}</span>
-                    <Badge variant="outline" className={getRequestStatusColor(req.status)}>{getRequestStatusLabel(req.status)}</Badge>
-                    <Badge variant="outline" className="text-xs">{getRequestPriorityLabel(req.priority)}</Badge>
+            {requests.map((req) => {
+              const attachments: string[] = (req as any).attachments ? JSON.parse((req as any).attachments) : [];
+              return (
+                <div key={req.id} className="p-3 rounded-lg border" onPaste={(e) => handleReqPaste(e, req.id)}>
+                  <div className="cursor-pointer" onClick={() => setExpandedReq(expandedReq === req.id ? null : req.id)}>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {expandedReq === req.id ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                      <span className="text-sm font-medium">{req.title}</span>
+                      <Badge variant="outline" className={getRequestStatusColor(req.status)}>{getRequestStatusLabel(req.status)}</Badge>
+                      <Badge variant="outline" className="text-xs">{getRequestPriorityLabel(req.priority)}</Badge>
+                      {attachments.length > 0 && <span className="text-xs text-muted-foreground"><Camera className="w-3 h-3 inline" /> {attachments.length}</span>}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1 line-clamp-1 ml-6">{req.content}</p>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1 line-clamp-1 ml-6">{req.content}</p>
+                  {expandedReq === req.id && (
+                    <div className="mt-3 pt-3 border-t space-y-3 ml-6">
+                      <p className="text-sm">{req.content}</p>
+                      {/* 첨부 이미지 */}
+                      {attachments.length > 0 && (
+                        <div className="grid grid-cols-4 gap-1">
+                          {attachments.map((url, i) => (
+                            <div key={i} className="aspect-square rounded overflow-hidden border">
+                              <img src={url} alt="" className="w-full h-full object-cover" />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Label className="text-xs">상태:</Label>
+                        <select value={req.status} onChange={(e) => updateRequestMutation.mutate({ id: req.id, data: { status: e.target.value } })}
+                          className="rounded-md border border-input bg-background px-2 py-1 text-xs">
+                          <option value="NEW">신규</option><option value="REVIEWING">검토중</option><option value="IN_PROGRESS">진행중</option>
+                          <option value="RESOLVED">해결</option><option value="ON_HOLD">보류</option><option value="REJECTED">반려</option>
+                        </select>
+                        <label className="text-xs text-primary cursor-pointer hover:underline ml-auto">
+                          {uploadingReq ? "업로드 중..." : "파일 첨부"}
+                          <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => { if (e.target.files) handleReqFileUpload(req.id, e.target.files); }} />
+                        </label>
+                        <span className="text-[10px] text-muted-foreground">Ctrl+V 붙여넣기 가능</span>
+                      </div>
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold">댓글</p>
+                        {comments?.map((c) => (
+                          <div key={c.id} className="p-2 bg-muted/50 rounded text-xs">{c.content}</div>
+                        ))}
+                        <form onSubmit={(e) => {
+                          e.preventDefault(); const fd = new FormData(e.currentTarget);
+                          const content = fd.get("comment") as string;
+                          if (content) { commentMutation.mutate({ requestId: req.id, content }); e.currentTarget.reset(); }
+                        }} className="flex gap-2">
+                          <Input name="comment" placeholder="댓글 입력..." className="h-8 text-xs" />
+                          <Button type="submit" size="sm" className="h-8">등록</Button>
+                        </form>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                {expandedReq === req.id && (
-                  <div className="mt-3 pt-3 border-t space-y-3 ml-6">
-                    <p className="text-sm">{req.content}</p>
-                    <div className="flex items-center gap-2">
-                      <Label className="text-xs">상태:</Label>
-                      <select value={req.status} onChange={(e) => updateRequestMutation.mutate({ id: req.id, data: { status: e.target.value } })}
-                        className="rounded-md border border-input bg-background px-2 py-1 text-xs">
-                        <option value="NEW">신규</option><option value="REVIEWING">검토중</option><option value="IN_PROGRESS">진행중</option>
-                        <option value="RESOLVED">해결</option><option value="ON_HOLD">보류</option><option value="REJECTED">반려</option>
-                      </select>
-                    </div>
-                    <div className="space-y-2">
-                      <p className="text-xs font-semibold">댓글</p>
-                      {comments?.map((c) => (
-                        <div key={c.id} className="p-2 bg-muted/50 rounded text-xs">{c.content}</div>
-                      ))}
-                      <form onSubmit={(e) => {
-                        e.preventDefault(); const fd = new FormData(e.currentTarget);
-                        const content = fd.get("comment") as string;
-                        if (content) { commentMutation.mutate({ requestId: req.id, content }); e.currentTarget.reset(); }
-                      }} className="flex gap-2">
-                        <Input name="comment" placeholder="댓글 입력..." className="h-8 text-xs" />
-                        <Button type="submit" size="sm" className="h-8">등록</Button>
-                      </form>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </CardContent>
@@ -1064,8 +1146,8 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
   });
 
   const sortedTasks = tasks ? [...tasks].sort((a, b) => a.sortOrder - b.sortOrder) : [];
-  const pendingDesignChecks = designChecks?.filter((c) => c.isCompleted === 0) ?? [];
-  const allChecks = designChecks ?? [];
+  const constructionChecks = designChecks?.filter((c) => (c as any).phase === "CONSTRUCTION") ?? [];
+  const linkedDesignChecks = designChecks?.filter((c) => ((c as any).phase === "DESIGN" || !(c as any).phase) && (c as any).linkedToConstruction === 1) ?? [];
 
   // Floor info from project
   const p = project as any;
@@ -1150,19 +1232,21 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="flex items-center gap-2">
             <CheckCircle2 className="w-5 h-5" /> 시공 체크리스트
+            <span className="text-sm font-normal text-muted-foreground">
+              {constructionChecks.filter((c) => c.isCompleted === 1).length}/{constructionChecks.length + linkedDesignChecks.length}
+            </span>
           </CardTitle>
           <Dialog open={checkDialogOpen} onOpenChange={setCheckDialogOpen}>
             <DialogTrigger asChild><Button size="sm"><Plus className="w-4 h-4 mr-1" />추가</Button></DialogTrigger>
             <DialogContent>
-              <DialogHeader><DialogTitle>체크리스트 항목 추가 (시공)</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle>시공 체크리스트 항목 추가</DialogTitle></DialogHeader>
               <form onSubmit={(e) => {
                 e.preventDefault(); const fd = new FormData(e.currentTarget);
-                checkMutation.mutate({ category: fd.get("category"), title: fd.get("title"), memo: fd.get("memo") || null });
+                checkMutation.mutate({ phase: "CONSTRUCTION", category: fd.get("category"), title: fd.get("title"), memo: fd.get("memo") || null });
               }} className="space-y-4">
-                <div className="space-y-2"><Label>카테고리</Label>
-                  <select name="category" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" defaultValue="ARCHITECTURE">
-                    <option value="ARCHITECTURE">건축</option><option value="STRUCTURE">구조</option><option value="MEP">기계/전기</option>
-                    <option value="INTERIOR">인테리어</option><option value="LANDSCAPE">조경</option><option value="PERMIT_DOC">인허가 서류</option>
+                <div className="space-y-2"><Label>공종 카테고리</Label>
+                  <select name="category" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" defaultValue="기초">
+                    {ConstructionCheckCategory.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
                 <div className="space-y-2"><Label>항목명</Label><Input name="title" required /></div>
@@ -1172,20 +1256,56 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
             </DialogContent>
           </Dialog>
         </CardHeader>
-        <CardContent>
-          {allChecks.length === 0 ? (
+        <CardContent className="space-y-4">
+          {/* 설계에서 연동된 항목 */}
+          {linkedDesignChecks.length > 0 && (
+            <div>
+              <h4 className="text-xs font-semibold text-orange-600 mb-2">설계 연동 항목</h4>
+              <div className="space-y-2">
+                {linkedDesignChecks.map((item) => (
+                  <div key={item.id} className="p-3 rounded-lg border border-orange-200 dark:border-orange-900/30 bg-orange-50/50 dark:bg-orange-900/10">
+                    <div className="flex items-start gap-3">
+                      <input type="checkbox" checked={item.isCompleted === 1}
+                        onChange={() => toggleCheckMutation.mutate({ id: item.id, isCompleted: item.isCompleted === 1 ? 0 : 1 })}
+                        className="w-4 h-4 rounded border-gray-300 mt-0.5 shrink-0" />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-[10px] px-1">{getDesignCheckCategoryLabel(item.category)}</Badge>
+                          <span className={`text-sm font-medium ${item.isCompleted === 1 ? "line-through text-muted-foreground" : ""}`}>{item.title}</span>
+                        </div>
+                        {item.memo && <p className="text-sm text-muted-foreground mt-1">{item.memo}</p>}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 시공 전용 항목 */}
+          {constructionChecks.length === 0 && linkedDesignChecks.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-4">체크리스트 항목이 없습니다</p>
-          ) : (
-            <div className="space-y-1">
-              {allChecks.map((item) => (
-                <div key={item.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50">
-                  <input type="checkbox" checked={item.isCompleted === 1}
-                    onChange={() => toggleCheckMutation.mutate({ id: item.id, isCompleted: item.isCompleted === 1 ? 0 : 1 })}
-                    className="w-4 h-4 rounded border-gray-300" />
-                  <span className="text-xs font-medium text-muted-foreground">[{getDesignCheckCategoryLabel(item.category)}]</span>
-                  <span className={`text-sm flex-1 ${item.isCompleted === 1 ? "line-through text-muted-foreground" : ""}`}>{item.title}</span>
-                </div>
-              ))}
+          ) : constructionChecks.length > 0 && (
+            <div>
+              {linkedDesignChecks.length > 0 && <h4 className="text-xs font-semibold text-muted-foreground mb-2">시공 항목</h4>}
+              <div className="space-y-2">
+                {constructionChecks.map((item) => (
+                  <div key={item.id} className="p-3 rounded-lg border hover:bg-muted/30">
+                    <div className="flex items-start gap-3">
+                      <input type="checkbox" checked={item.isCompleted === 1}
+                        onChange={() => toggleCheckMutation.mutate({ id: item.id, isCompleted: item.isCompleted === 1 ? 0 : 1 })}
+                        className="w-4 h-4 rounded border-gray-300 mt-0.5 shrink-0" />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-[10px] px-1">{item.category}</Badge>
+                          <span className={`text-sm font-medium ${item.isCompleted === 1 ? "line-through text-muted-foreground" : ""}`}>{item.title}</span>
+                        </div>
+                        {item.memo && <p className="text-sm text-muted-foreground mt-1">{item.memo}</p>}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </CardContent>

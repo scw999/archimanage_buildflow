@@ -202,6 +202,13 @@ export async function autoMigrate() {
       try { await db.execute(sql.raw(`ALTER TABLE construction_tasks ADD COLUMN IF NOT EXISTS ${col}`)); } catch {}
     }
 
+    // Add new columns to design_checks
+    for (const col of ["phase TEXT DEFAULT 'DESIGN'", "linked_to_construction INTEGER DEFAULT 0", "attachments TEXT"]) {
+      try { await db.execute(sql.raw(`ALTER TABLE design_checks ADD COLUMN IF NOT EXISTS ${col}`)); } catch {}
+    }
+    // Add attachments to client_requests
+    try { await db.execute(sql.raw(`ALTER TABLE client_requests ADD COLUMN IF NOT EXISTS attachments TEXT`)); } catch {}
+
     // Add sub_category to photos table
     try {
       await db.execute(sql.raw(`ALTER TABLE photos ADD COLUMN IF NOT EXISTS sub_category TEXT`));

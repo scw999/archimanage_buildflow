@@ -222,6 +222,7 @@ export const clientRequests = pgTable("client_requests", {
   priority: text("priority").notNull().$type<typeof RequestPriority[number]>(),
   category: text("category").notNull().$type<typeof RequestCategory[number]>(),
   assigneeId: varchar("assignee_id"),
+  attachments: text("attachments"),
   createdBy: varchar("created_by"),
   createdAt: timestamp("created_at").defaultNow(),
   resolvedAt: timestamp("resolved_at"),
@@ -236,6 +237,7 @@ export const insertClientRequestSchema = createInsertSchema(clientRequests).pick
   priority: true,
   category: true,
   assigneeId: true,
+  attachments: true,
   createdBy: true,
 });
 
@@ -292,27 +294,34 @@ export const insertDesignChangeSchema = createInsertSchema(designChanges).pick({
 export type InsertDesignChange = z.infer<typeof insertDesignChangeSchema>;
 export type DesignChange = typeof designChanges.$inferSelect;
 
-// Design checklist items (설계 체크리스트)
+// Checklist items (설계/시공 체크리스트)
 export const DesignCheckCategory = ["ARCHITECTURE", "STRUCTURE", "MEP", "INTERIOR", "LANDSCAPE", "PERMIT_DOC"] as const;
+export const ConstructionCheckCategory = ["가설", "토공", "기초", "골조", "방수", "석공", "타일", "목공", "창호", "도장", "단열", "지붕", "전기", "설비", "소방", "마감", "조경", "기타"] as const;
 
 export const designChecks = pgTable("design_checks", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   projectId: varchar("project_id").notNull(),
-  category: text("category").notNull().$type<typeof DesignCheckCategory[number]>(),
+  phase: text("phase").notNull().default("DESIGN"),
+  category: text("category").notNull(),
   title: text("title").notNull(),
   isCompleted: integer("is_completed").notNull().default(0),
   completedBy: varchar("completed_by"),
   completedAt: timestamp("completed_at"),
   memo: text("memo"),
+  linkedToConstruction: integer("linked_to_construction").notNull().default(0),
+  attachments: text("attachments"),
 });
 
 export const insertDesignCheckSchema = createInsertSchema(designChecks).pick({
   projectId: true,
+  phase: true,
   category: true,
   title: true,
   isCompleted: true,
   completedBy: true,
   memo: true,
+  linkedToConstruction: true,
+  attachments: true,
 });
 
 export type InsertDesignCheck = z.infer<typeof insertDesignCheckSchema>;

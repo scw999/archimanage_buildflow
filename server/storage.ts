@@ -541,7 +541,7 @@ export class MemStorage implements IStorage {
 
   async createRequest(insertRequest: InsertClientRequest): Promise<ClientRequest> {
     const id = randomUUID();
-    const request: ClientRequest = { id, createdAt: new Date(), resolvedAt: null, assigneeId: null, createdBy: null, ...insertRequest };
+    const request: ClientRequest = { id, createdAt: new Date(), resolvedAt: null, assigneeId: null, attachments: null, createdBy: null, ...insertRequest };
     this.clientRequests.set(id, request);
     return request;
   }
@@ -593,7 +593,7 @@ export class MemStorage implements IStorage {
 
   async createDesignCheck(insertCheck: InsertDesignCheck): Promise<DesignCheck> {
     const id = randomUUID();
-    const check: DesignCheck = { id, isCompleted: 0, completedBy: null, completedAt: null, memo: null, ...insertCheck };
+    const check: DesignCheck = { id, phase: "DESIGN", isCompleted: 0, completedBy: null, completedAt: null, memo: null, linkedToConstruction: 0, attachments: null, ...insertCheck };
     this.designChecks.set(id, check);
     return check;
   }
