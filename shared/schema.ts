@@ -112,6 +112,7 @@ export const schedules = pgTable("schedules", {
   memo: text("memo"),
   location: text("location"),
   time: text("time"),
+  attachments: text("attachments"),
   createdBy: varchar("created_by"),
 });
 
@@ -124,6 +125,7 @@ export const insertScheduleSchema = createInsertSchema(schedules).pick({
   memo: true,
   location: true,
   time: true,
+  attachments: true,
   createdBy: true,
 });
 
@@ -139,6 +141,7 @@ export const dailyLogs = pgTable("daily_logs", {
   content: text("content").notNull(),
   weather: text("weather"),
   workers: integer("workers"),
+  attachments: text("attachments"),
   createdBy: varchar("created_by"),
 });
 
@@ -149,6 +152,7 @@ export const insertDailyLogSchema = createInsertSchema(dailyLogs).pick({
   content: true,
   weather: true,
   workers: true,
+  attachments: true,
   createdBy: true,
 });
 

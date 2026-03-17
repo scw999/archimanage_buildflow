@@ -42,10 +42,12 @@ export interface IStorage {
   // Schedules
   getSchedulesByProject(projectId: string): Promise<Schedule[]>;
   createSchedule(schedule: InsertSchedule): Promise<Schedule>;
+  updateSchedule(id: string, data: Partial<InsertSchedule>): Promise<Schedule | undefined>;
 
   // DailyLogs
   getDailyLogsByProject(projectId: string): Promise<DailyLog[]>;
   createDailyLog(log: InsertDailyLog): Promise<DailyLog>;
+  updateDailyLog(id: string, data: Partial<InsertDailyLog>): Promise<DailyLog | undefined>;
 
   // Files
   getFilesByProject(projectId: string): Promise<File[]>;
@@ -227,12 +229,12 @@ export class MemStorage implements IStorage {
 
     // Schedules for project 1
     const scheduleData: Array<Omit<Schedule, "id">> = [
-      { projectId: proj1Id, phase: "CONSTRUCTION", title: "기초 공사 착공", date: "2024-09-01", category: "CONSTRUCTION", memo: "기초 콘크리트 타설 시작", createdBy: adminId },
-      { projectId: proj1Id, phase: "CONSTRUCTION", title: "골조 공사 완료 점검", date: "2024-10-15", category: "INSPECTION", memo: "구조 안전 검사", createdBy: adminId },
-      { projectId: proj1Id, phase: "CONSTRUCTION", title: "건축주 미팅", date: "2024-11-01", category: "MEETING", memo: "내부 마감재 선정 회의", createdBy: adminId },
-      { projectId: proj1Id, phase: "CONSTRUCTION", title: "전기 배선 완료 기한", date: "2024-11-20", category: "DEADLINE", memo: null, createdBy: adminId },
-      { projectId: proj2Id, phase: "DESIGN", title: "초기 디자인 컨셉 발표", date: "2024-07-01", category: "MEETING", memo: "건축주 참석 필수", createdBy: adminId },
-      { projectId: proj2Id, phase: "DESIGN", title: "실시 설계 제출 마감", date: "2024-08-15", category: "DEADLINE", memo: null, createdBy: adminId },
+      { projectId: proj1Id, phase: "CONSTRUCTION", title: "기초 공사 착공", date: "2024-09-01", category: "CONSTRUCTION", memo: "기초 콘크리트 타설 시작", location: null, time: null, attachments: null, createdBy: adminId },
+      { projectId: proj1Id, phase: "CONSTRUCTION", title: "골조 공사 완료 점검", date: "2024-10-15", category: "INSPECTION", memo: "구조 안전 검사", location: null, time: null, attachments: null, createdBy: adminId },
+      { projectId: proj1Id, phase: "CONSTRUCTION", title: "건축주 미팅", date: "2024-11-01", category: "MEETING", memo: "내부 마감재 선정 회의", location: null, time: null, attachments: null, createdBy: adminId },
+      { projectId: proj1Id, phase: "CONSTRUCTION", title: "전기 배선 완료 기한", date: "2024-11-20", category: "DEADLINE", memo: null, location: null, time: null, attachments: null, createdBy: adminId },
+      { projectId: proj2Id, phase: "DESIGN", title: "초기 디자인 컨셉 발표", date: "2024-07-01", category: "MEETING", memo: "건축주 참석 필수", location: null, time: null, attachments: null, createdBy: adminId },
+      { projectId: proj2Id, phase: "DESIGN", title: "실시 설계 제출 마감", date: "2024-08-15", category: "DEADLINE", memo: null, location: null, time: null, attachments: null, createdBy: adminId },
     ];
 
     scheduleData.forEach((s, i) => {
@@ -242,9 +244,9 @@ export class MemStorage implements IStorage {
 
     // Daily Logs for project 1
     const logData: Array<Omit<DailyLog, "id">> = [
-      { projectId: proj1Id, phase: "CONSTRUCTION", date: "2024-09-01", content: "기초 콘크리트 타설 작업 진행. 레미콘 15대 투입. 오전 중 타설 완료.", weather: "맑음", workers: 12, createdBy: adminId },
-      { projectId: proj1Id, phase: "CONSTRUCTION", date: "2024-09-02", content: "기초 양생 작업 및 거푸집 해체. 배수 시스템 설치 시작.", weather: "흐림", workers: 8, createdBy: adminId },
-      { projectId: proj1Id, phase: "CONSTRUCTION", date: "2024-09-03", content: "1층 골조 철근 배근 작업 시작. 자재 반입 완료.", weather: "맑음", workers: 15, createdBy: adminId },
+      { projectId: proj1Id, phase: "CONSTRUCTION", date: "2024-09-01", content: "기초 콘크리트 타설 작업 진행. 레미콘 15대 투입. 오전 중 타설 완료.", weather: "맑음", workers: 12, attachments: null, createdBy: adminId },
+      { projectId: proj1Id, phase: "CONSTRUCTION", date: "2024-09-02", content: "기초 양생 작업 및 거푸집 해체. 배수 시스템 설치 시작.", weather: "흐림", workers: 8, attachments: null, createdBy: adminId },
+      { projectId: proj1Id, phase: "CONSTRUCTION", date: "2024-09-03", content: "1층 골조 철근 배근 작업 시작. 자재 반입 완료.", weather: "맑음", workers: 15, attachments: null, createdBy: adminId },
     ];
 
     logData.forEach((l, i) => {
@@ -473,9 +475,17 @@ export class MemStorage implements IStorage {
 
   async createSchedule(insertSchedule: InsertSchedule): Promise<Schedule> {
     const id = randomUUID();
-    const schedule: Schedule = { id, memo: null, location: null, time: null, createdBy: null, ...insertSchedule };
+    const schedule: Schedule = { id, memo: null, location: null, time: null, attachments: null, createdBy: null, ...insertSchedule };
     this.schedules.set(id, schedule);
     return schedule;
+  }
+
+  async updateSchedule(id: string, data: Partial<InsertSchedule>): Promise<Schedule | undefined> {
+    const existing = this.schedules.get(id);
+    if (!existing) return undefined;
+    const updated = { ...existing, ...data };
+    this.schedules.set(id, updated);
+    return updated;
   }
 
   // DailyLogs
@@ -485,9 +495,17 @@ export class MemStorage implements IStorage {
 
   async createDailyLog(insertLog: InsertDailyLog): Promise<DailyLog> {
     const id = randomUUID();
-    const log: DailyLog = { id, weather: null, workers: null, createdBy: null, ...insertLog };
+    const log: DailyLog = { id, weather: null, workers: null, attachments: null, createdBy: null, ...insertLog };
     this.dailyLogs.set(id, log);
     return log;
+  }
+
+  async updateDailyLog(id: string, data: Partial<InsertDailyLog>): Promise<DailyLog | undefined> {
+    const existing = this.dailyLogs.get(id);
+    if (!existing) return undefined;
+    const updated = { ...existing, ...data };
+    this.dailyLogs.set(id, updated);
+    return updated;
   }
 
   // Files

@@ -8,9 +8,12 @@ import { AppLayout } from "@/components/app-layout";
 import { FolderKanban, Activity, AlertCircle, Plus, MapPin } from "lucide-react";
 import type { Project, ClientRequest } from "@shared/schema";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useAuth } from "@/lib/auth";
 
 export default function Dashboard() {
   const [, setLocation] = useLocation();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "SUPER_ADMIN";
 
   const { data: projects, isLoading } = useQuery<Project[]>({
     queryKey: ["/api/projects"],
@@ -27,10 +30,12 @@ export default function Dashboard() {
             <h1 className="text-2xl font-bold">대시보드</h1>
             <p className="text-muted-foreground text-sm">프로젝트 현황을 한눈에 확인하세요</p>
           </div>
-          <Button onClick={() => setLocation("/projects")} data-testid="new-project-button">
-            <Plus className="w-4 h-4 mr-2" />
-            새 프로젝트
-          </Button>
+          {isAdmin && (
+            <Button onClick={() => setLocation("/projects")} data-testid="new-project-button">
+              <Plus className="w-4 h-4 mr-2" />
+              새 프로젝트
+            </Button>
+          )}
         </div>
 
         {/* Stats */}
@@ -100,6 +105,11 @@ export default function Dashboard() {
                   onClick={() => setLocation(`/projects/${project.id}`)}
                   data-testid={`project-card-${project.id}`}
                 >
+                  {project.coverImageUrl && (
+                    <div className="h-32 overflow-hidden rounded-t-lg">
+                      <img src={project.coverImageUrl} alt="" className="w-full h-full object-cover" />
+                    </div>
+                  )}
                   <CardHeader className="pb-3">
                     <div className="flex items-start justify-between">
                       <CardTitle className="text-base">{project.name}</CardTitle>

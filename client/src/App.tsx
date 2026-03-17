@@ -25,10 +25,11 @@ function AuthTokenSync() {
 }
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   const [location, setLocation] = useLocation();
 
   useEffect(() => {
+    if (isLoading) return;
     if (!isAuthenticated && location !== "/login") {
       setLocation("/login");
     }
@@ -39,7 +40,11 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
         setLocation("/");
       }
     }
-  }, [isAuthenticated, location, setLocation, user]);
+  }, [isAuthenticated, isLoading, location, setLocation, user]);
+
+  if (isLoading) {
+    return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" /></div>;
+  }
 
   if (!isAuthenticated && location !== "/login") {
     return null;

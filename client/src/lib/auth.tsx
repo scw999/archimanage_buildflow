@@ -20,7 +20,31 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<SafeUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Restore session from localStorage on mount
+  useEffect(() => {
+    const savedToken = localStorage.getItem("bw_token");
+    if (savedToken) {
+      fetch(`${API_BASE}/api/auth/me`, {
+        headers: { Authorization: `Bearer ${savedToken}` },
+      })
+        .then((res) => {
+          if (res.ok) return res.json();
+          throw new Error("expired");
+        })
+        .then((userData) => {
+          setUser(userData);
+          setToken(savedToken);
+        })
+        .catch(() => {
+          localStorage.removeItem("bw_token");
+        })
+        .finally(() => setIsLoading(false));
+    } else {
+      setIsLoading(false);
+    }
+  }, []);
 
   const login = useCallback(async (username: string, password: string) => {
     const res = await fetch(`${API_BASE}/api/auth/login`, {
@@ -35,6 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const data = await res.json();
     setUser(data.user);
     setToken(data.token);
+    localStorage.setItem("bw_token", data.token);
   }, []);
 
   const logout = useCallback(async () => {
@@ -50,6 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     setUser(null);
     setToken(null);
+    localStorage.removeItem("bw_token");
     queryClient.clear();
   }, [token]);
 

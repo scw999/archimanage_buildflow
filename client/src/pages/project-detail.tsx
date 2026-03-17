@@ -18,13 +18,198 @@ import { DateInput } from "@/components/date-input";
 import { apiRequest, queryClient, getAuthToken } from "@/lib/queryClient";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
+
+// Reusable drag & drop + paste + click file upload zone (images + files)
+function FileDropZone({ projectId, phase, subCategory, onUploaded, existingUrls = [], acceptImages = true, acceptFiles = true, children }: {
+  projectId: string; phase: string; subCategory: string;
+  onUploaded: (urls: string[]) => void; existingUrls?: string[];
+  acceptImages?: boolean; acceptFiles?: boolean;
+  children?: React.ReactNode;
+}) {
+  const { toast } = useToast();
+  const [dragging, setDragging] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  const uploadFiles = async (fileList: File[]) => {
+    const files = fileList.slice(0, 10);
+    if (!files.length) return;
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      for (const f of files) fd.append("photos", f);
+      fd.append("phase", phase);
+      fd.append("subCategory", subCategory);
+      const res = await fetch(`${API_BASE}/api/projects/${projectId}/photos/upload`, {
+        method: "POST", headers: { Authorization: `Bearer ${getAuthToken()}` }, body: fd,
+      });
+      if (!res.ok) throw new Error("업로드 실패");
+      const uploaded = await res.json();
+      const urls = uploaded.map((p: any) => p.imageUrl);
+      onUploaded([...existingUrls, ...urls]);
+      toast({ title: `${files.length}개 첨부되었습니다` });
+    } catch { toast({ title: "업로드 실패", variant: "destructive" }); }
+    finally { setUploading(false); }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault(); setDragging(false);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length) uploadFiles(files);
+  };
+
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const files: File[] = [];
+    for (const item of Array.from(items)) {
+      if (item.type.startsWith("image/") || (acceptFiles && item.kind === "file")) {
+        const file = item.getAsFile();
+        if (file) files.push(file);
+      }
+    }
+    if (files.length) { e.preventDefault(); uploadFiles(files); }
+  };
+
+  const isImage = (url: string) => /\.(jpg|jpeg|png|gif|webp|svg|bmp)(\?|$)/i.test(url);
+  const getFileName = (url: string) => decodeURIComponent(url.split("/").pop() || "파일");
+
+  const acceptStr = acceptImages && acceptFiles ? "*" : acceptImages ? "image/*" : "*";
+
+  return (
+    <div
+      onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={handleDrop}
+      onPaste={handlePaste}
+      className={`relative rounded-lg border-2 border-dashed p-3 transition-colors ${dragging ? "border-primary bg-primary/5" : "border-muted"}`}
+    >
+      {children}
+      {existingUrls.length > 0 && (
+        <div className="grid grid-cols-4 gap-1.5 mt-2">
+          {existingUrls.map((url, i) => (
+            isImage(url) ? (
+              <div key={i} className="aspect-square rounded overflow-hidden border">
+                <img src={url} alt="" className="w-full h-full object-cover" />
+              </div>
+            ) : (
+              <a key={i} href={url} target="_blank" rel="noopener noreferrer"
+                className="flex flex-col items-center justify-center p-2 rounded border bg-muted/30 hover:bg-muted/60 text-center gap-1">
+                <FileText className="w-5 h-5 text-muted-foreground" />
+                <span className="text-[10px] text-muted-foreground line-clamp-2 break-all">{getFileName(url)}</span>
+              </a>
+            )
+          ))}
+        </div>
+      )}
+      <div className="flex items-center gap-2 mt-1.5">
+        <label className="text-xs text-primary cursor-pointer hover:underline">
+          {uploading ? "업로드 중..." : (acceptFiles ? "사진/파일 첨부" : "사진 첨부")}
+          <input type="file" accept={acceptStr} multiple className="hidden" disabled={uploading}
+            onChange={(e) => { if (e.target.files) uploadFiles(Array.from(e.target.files)); e.target.value = ""; }} />
+        </label>
+        <span className="text-xs text-muted-foreground">드래그, Ctrl+V 가능</span>
+      </div>
+      {dragging && (
+        <div className="absolute inset-0 rounded-lg bg-primary/10 flex items-center justify-center pointer-events-none z-10">
+          <p className="text-sm font-medium text-primary">여기에 파일을 놓으세요</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Backward compat alias
+const ImageDropZone = FileDropZone;
+
+// ─── Reusable Attachment Display ────────────────────────────
+const isImageUrl = (url: string) => /\.(jpg|jpeg|png|gif|webp|svg|bmp)(\?|$)/i.test(url);
+const getFileNameFromUrl = (url: string) => {
+  try { return decodeURIComponent(url.split("/").pop()?.split("?")[0] || "파일"); }
+  catch { return "파일"; }
+};
+
+function AttachmentDisplay({ urls, onRemove, compact = false }: {
+  urls: string[]; onRemove?: (idx: number) => void; compact?: boolean;
+}) {
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  if (!urls.length) return null;
+  const gridCls = compact ? "grid grid-cols-6 gap-1" : "grid grid-cols-4 gap-1.5";
+  const sizeCls = compact ? "w-10 h-10" : "aspect-square";
+  return (
+    <>
+      <div className={gridCls}>
+        {urls.map((url, i) =>
+          isImageUrl(url) ? (
+            <div key={i} className={`${sizeCls} rounded overflow-hidden border cursor-pointer hover:opacity-80 transition-opacity relative group`}
+              onClick={() => setLightboxUrl(url)}>
+              <img src={url} alt="" className="w-full h-full object-cover" loading="lazy" />
+              {onRemove && (
+                <button className="absolute top-0 right-0 bg-black/60 text-white rounded-bl w-4 h-4 flex items-center justify-center opacity-0 group-hover:opacity-100 text-[10px]"
+                  onClick={(e) => { e.stopPropagation(); onRemove(i); }}>×</button>
+              )}
+            </div>
+          ) : (
+            <a key={i} href={url} target="_blank" rel="noopener noreferrer" download
+              className={`${sizeCls} flex flex-col items-center justify-center p-1 rounded border bg-muted/30 hover:bg-muted/60 text-center gap-0.5 relative group`}>
+              <Download className="w-3.5 h-3.5 text-muted-foreground" />
+              <span className="text-[9px] text-muted-foreground line-clamp-2 break-all leading-tight">{getFileNameFromUrl(url)}</span>
+              {onRemove && (
+                <button className="absolute top-0 right-0 bg-black/60 text-white rounded-bl w-4 h-4 flex items-center justify-center opacity-0 group-hover:opacity-100 text-[10px]"
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRemove(i); }}>×</button>
+              )}
+            </a>
+          )
+        )}
+      </div>
+      {lightboxUrl && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => setLightboxUrl(null)}>
+          <div className="relative max-w-4xl max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
+            <Button variant="ghost" size="icon" className="absolute -top-10 right-0 text-white hover:text-white/80" onClick={() => setLightboxUrl(null)}>
+              <X className="w-6 h-6" />
+            </Button>
+            <img src={lightboxUrl} alt="" className="max-w-full max-h-[85vh] object-contain rounded-lg" />
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+// ─── Construction Category Priority (for sensible insertion order) ────
+const CONSTRUCTION_CATEGORY_PRIORITY: Record<string, number> = {
+  "가설공사": 10,
+  "토공사": 20,
+  "기초공사": 30,
+  "철근콘크리트공사": 40,
+  "철골공사": 45,
+  "조적공사": 50,
+  "방수공사": 60,
+  "석공사": 65,
+  "타일공사": 70,
+  "목공사": 75,
+  "금속공사": 78,
+  "창호공사": 80,
+  "도장공사": 85,
+  "수장공사": 87,
+  "단열공사": 90,
+  "지붕공사": 95,
+  "전기공사": 100,
+  "설비공사": 110,
+  "소방공사": 115,
+  "통신공사": 118,
+  "승강기공사": 120,
+  "조경공사": 130,
+  "외부마감": 140,
+  "준공청소": 150,
+  "기타": 999,
+};
 import {
   Plus, Calendar, FileText, Camera,
   MapPin, User, ExternalLink, Download, X,
   Cloud, Users, CheckCircle2, ClipboardList,
   HardHat, AlertTriangle, Search, MessageSquare,
   FolderTree, ChevronDown, ChevronRight, Building2, Ruler, Layers, Trash2,
-  GripVertical, Pencil
+  GripVertical, Pencil, Download, ArrowUpDown, Image as ImageIcon
 } from "lucide-react";
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
@@ -432,6 +617,58 @@ function OverviewTab({ project }: { project: Project }) {
           <Button size="sm" variant="outline" onClick={() => setEditOpen(true)}>수정</Button>
         </CardHeader>
         <CardContent className="space-y-3">
+          {/* 대표 사진 */}
+          <div>
+            {project.coverImageUrl ? (
+              <div className="relative rounded-lg overflow-hidden border mb-3 max-h-48">
+                <img src={project.coverImageUrl} alt="대표 사진" className="w-full h-48 object-cover" />
+                <div className="absolute bottom-2 right-2">
+                  <label className="bg-black/60 text-white text-xs px-2 py-1 rounded cursor-pointer hover:bg-black/80">
+                    변경
+                    <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const fd = new FormData();
+                      fd.append("photos", file);
+                      fd.append("phase", project.currentPhase);
+                      fd.append("subCategory", "대표사진");
+                      const res = await fetch(`${API_BASE}/api/projects/${project.id}/photos/upload`, {
+                        method: "POST", headers: { Authorization: `Bearer ${getAuthToken()}` }, body: fd,
+                      });
+                      if (res.ok) {
+                        const [photo] = await res.json();
+                        updateMutation.mutate({ coverImageUrl: photo.imageUrl });
+                      }
+                      e.target.value = "";
+                    }} />
+                  </label>
+                </div>
+              </div>
+            ) : (
+              <label className="flex items-center justify-center h-32 rounded-lg border-2 border-dashed border-muted cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors mb-3">
+                <div className="text-center">
+                  <Camera className="w-6 h-6 mx-auto text-muted-foreground mb-1" />
+                  <p className="text-xs text-muted-foreground">대표 사진 등록</p>
+                </div>
+                <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const fd = new FormData();
+                  fd.append("photos", file);
+                  fd.append("phase", project.currentPhase);
+                  fd.append("subCategory", "대표사진");
+                  const res = await fetch(`${API_BASE}/api/projects/${project.id}/photos/upload`, {
+                    method: "POST", headers: { Authorization: `Bearer ${getAuthToken()}` }, body: fd,
+                  });
+                  if (res.ok) {
+                    const [photo] = await res.json();
+                    updateMutation.mutate({ coverImageUrl: photo.imageUrl });
+                  }
+                  e.target.value = "";
+                }} />
+              </label>
+            )}
+          </div>
           {project.description && <p className="text-sm">{project.description}</p>}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
             {project.clientName && (
@@ -635,11 +872,12 @@ function OverviewTab({ project }: { project: Project }) {
 }
 
 // ─── Design Tab ──────────────────────────────────────────────
-function DesignTab({ projectId }: { projectId: string }) {
+function DesignTab({ projectId, project }: { projectId: string; project: Project }) {
   const { toast } = useToast();
   const [checkDialogOpen, setCheckDialogOpen] = useState(false);
   const [changeDialogOpen, setChangeDialogOpen] = useState(false);
   const [selectedChange, setSelectedChange] = useState<DesignChange | null>(null);
+  const [showAllFloors, setShowAllFloors] = useState(false);
 
   const { data: allDesignChecks } = useQuery<DesignCheck[]>({ queryKey: [`/api/projects/${projectId}/design-checks`] });
   const designChecks = allDesignChecks?.filter((c) => (c as any).phase === "DESIGN" || !(c as any).phase) ?? [];
@@ -698,8 +936,98 @@ function DesignTab({ projectId }: { projectId: string }) {
     if (items.length > 0) grouped[cat] = items;
   });
 
+  const { data: photos } = useQuery<Photo[]>({ queryKey: [`/api/projects/${projectId}/photos`] });
+
+  // Floor plan slots based on project floor count
+  const pp = project as any;
+  const basementFloors = pp.basementFloors ?? 0;
+  const aboveFloors = pp.aboveFloors ?? 0;
+  const floorSlots: string[] = [];
+  for (let i = basementFloors; i >= 1; i--) floorSlots.push(`평면도-지하${i}층`);
+  for (let i = 1; i <= aboveFloors; i++) floorSlots.push(`평면도-${i}층`);
+  if (aboveFloors > 0) floorSlots.push("평면도-옥상");
+  if (floorSlots.length === 0) floorSlots.push("평면도-1층"); // default at least 1
+
+  const elevationSlots = ["입면도-정면", "입면도-우측", "입면도-좌측", "입면도-배면", "입면도-대표"];
+
+  const getSlotPhotos = (sub: string) => photos?.filter((p) => p.phase === "DESIGN" && (p as any).subCategory === sub) ?? [];
+  const visibleFloorSlots = showAllFloors ? floorSlots : floorSlots.slice(0, 5);
+
   return (
     <div className="space-y-6" data-testid="design-tab">
+      {/* 평면도 (Floor Plans) */}
+      <Card>
+        <CardHeader><CardTitle className="flex items-center gap-2"><Layers className="w-5 h-5" /> 평면도</CardTitle></CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+            {visibleFloorSlots.map((slot) => {
+              const slotPhotos = getSlotPhotos(slot);
+              const label = slot.replace("평면도-", "");
+              return (
+                <div key={slot} className="space-y-1">
+                  <p className="text-xs font-medium text-center text-muted-foreground">{label}</p>
+                  {slotPhotos.length > 0 ? (
+                    <div className="space-y-1">
+                      {slotPhotos.map((p) => (
+                        <AttachmentDisplay key={p.id} urls={[p.imageUrl]} />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="aspect-square rounded-lg border-2 border-dashed border-muted flex items-center justify-center">
+                      <ImageIcon className="w-6 h-6 text-muted-foreground/40" />
+                    </div>
+                  )}
+                  <FileDropZone projectId={projectId} phase="DESIGN" subCategory={slot} acceptFiles
+                    existingUrls={[]} onUploaded={() => queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/photos`] })}>
+                    <span className="text-[10px] text-muted-foreground">추가</span>
+                  </FileDropZone>
+                </div>
+              );
+            })}
+          </div>
+          {floorSlots.length > 5 && (
+            <Button variant="ghost" size="sm" className="w-full mt-2 text-xs"
+              onClick={() => setShowAllFloors(!showAllFloors)}>
+              {showAllFloors ? "접기" : `나머지 ${floorSlots.length - 5}개 층 보기`}
+              {showAllFloors ? <ChevronDown className="w-3 h-3 ml-1" /> : <ChevronRight className="w-3 h-3 ml-1" />}
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* 입면도 (Elevations) */}
+      <Card>
+        <CardHeader><CardTitle className="flex items-center gap-2"><Building2 className="w-5 h-5" /> 입면도</CardTitle></CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+            {elevationSlots.map((slot) => {
+              const slotPhotos = getSlotPhotos(slot);
+              const label = slot.replace("입면도-", "");
+              return (
+                <div key={slot} className="space-y-1">
+                  <p className="text-xs font-medium text-center text-muted-foreground">{label}</p>
+                  {slotPhotos.length > 0 ? (
+                    <div className="space-y-1">
+                      {slotPhotos.map((p) => (
+                        <AttachmentDisplay key={p.id} urls={[p.imageUrl]} />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="aspect-square rounded-lg border-2 border-dashed border-muted flex items-center justify-center">
+                      <ImageIcon className="w-6 h-6 text-muted-foreground/40" />
+                    </div>
+                  )}
+                  <FileDropZone projectId={projectId} phase="DESIGN" subCategory={slot} acceptFiles
+                    existingUrls={[]} onUploaded={() => queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/photos`] })}>
+                    <span className="text-[10px] text-muted-foreground">추가</span>
+                  </FileDropZone>
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* 설계 체크리스트 */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
@@ -778,30 +1106,9 @@ function DesignTab({ projectId }: { projectId: string }) {
                                 <AttachmentPreviewGrid attachments={itemAttachments} />
                               </div>
                             )}
-                            <div className="mt-1">
-                              <label className="text-xs text-primary cursor-pointer hover:underline">
-                                사진/파일 첨부
-                                <input type="file" accept="image/*" multiple className="hidden" onChange={async (e) => {
-                                  const files = e.target.files;
-                                  if (!files?.length) return;
-                                  try {
-                                    const fd = new FormData();
-                                    for (const f of Array.from(files).slice(0, 10)) fd.append("photos", f);
-                                    fd.append("phase", "DESIGN");
-                                    fd.append("subCategory", "체크리스트첨부");
-                                    const res = await fetch(`${API_BASE}/api/projects/${projectId}/photos/upload`, {
-                                      method: "POST", headers: { Authorization: `Bearer ${getAuthToken()}` }, body: fd,
-                                    });
-                                    if (!res.ok) throw new Error("업로드 실패");
-                                    const uploaded = await res.json();
-                                    const urls = uploaded.map((p: any) => p.imageUrl);
-                                    toggleCheckMutation.mutate({ id: item.id, attachments: JSON.stringify([...itemAttachments, ...urls]) });
-                                    toast({ title: "파일이 첨부되었습니다" });
-                                  } catch { toast({ title: "업로드 실패", variant: "destructive" }); }
-                                  e.target.value = "";
-                                }} />
-                              </label>
-                            </div>
+                            <ImageDropZone projectId={projectId} phase="DESIGN" subCategory="체크리스트첨부"
+                              existingUrls={itemAttachments}
+                              onUploaded={(urls) => toggleCheckMutation.mutate({ id: item.id, attachments: JSON.stringify(urls) })} />
                           </div>
                         </div>
                       </div>
@@ -929,6 +1236,7 @@ function RequestsSection({ projectId, phase }: { projectId: string; phase: strin
   const [expandedReq, setExpandedReq] = useState<string | null>(null);
   const [uploadingReq, setUploadingReq] = useState(false);
   const [editingReq, setEditingReq] = useState<ClientRequest | null>(null);
+  const [newReqAttachments, setNewReqAttachments] = useState<string[]>([]);
   const isAdmin = user?.role === "SUPER_ADMIN";
   const isPM = user?.role === "PM" || isAdmin;
 
@@ -1009,7 +1317,7 @@ function RequestsSection({ projectId, phase }: { projectId: string; phase: strin
         <CardTitle className="flex items-center gap-2">
           <MessageSquare className="w-5 h-5" /> 건축주 요청사항 ({phaseLabel}) <span className="text-sm font-normal text-muted-foreground">{resolved}/{requests.length} 해결</span>
         </CardTitle>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if (!o) setNewReqAttachments([]); }}>
           <DialogTrigger asChild><Button size="sm"><Plus className="w-4 h-4 mr-1" />요청 등록</Button></DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>요청사항 등록 ({phaseLabel} 단계)</DialogTitle></DialogHeader>
@@ -1018,7 +1326,9 @@ function RequestsSection({ projectId, phase }: { projectId: string; phase: strin
               requestMutation.mutate({
                 phase, title: fd.get("title"), content: fd.get("content"),
                 category: fd.get("category"), priority: fd.get("priority"), status: "NEW",
+                attachments: newReqAttachments.length ? JSON.stringify(newReqAttachments) : null,
               });
+              setNewReqAttachments([]);
             }} className="space-y-4">
               <div className="space-y-2"><Label>제목</Label><Input name="title" required /></div>
               <div className="space-y-2"><Label>내용</Label><Textarea name="content" required /></div>
@@ -1036,6 +1346,11 @@ function RequestsSection({ projectId, phase }: { projectId: string; phase: strin
                   </select>
                 </div>
               </div>
+              <div className="space-y-2">
+                <Label>사진 첨부</Label>
+                <FileDropZone projectId={projectId} phase={phase} subCategory="요청첨부" acceptFiles
+                  existingUrls={newReqAttachments} onUploaded={setNewReqAttachments} />
+              </div>
               <Button type="submit" disabled={requestMutation.isPending}>등록</Button>
             </form>
           </DialogContent>
@@ -1049,7 +1364,7 @@ function RequestsSection({ projectId, phase }: { projectId: string; phase: strin
             {requests.map((req) => {
               const attachments: string[] = (req as any).attachments ? JSON.parse((req as any).attachments) : [];
               return (
-                <div key={req.id} className="p-3 rounded-lg border" onPaste={(e) => handleReqPaste(e, req.id)}>
+                <div key={req.id} className="p-3 rounded-lg border">
                   <div className="cursor-pointer" onClick={() => setExpandedReq(expandedReq === req.id ? null : req.id)}>
                     <div className="flex items-center gap-2 flex-wrap">
                       {expandedReq === req.id ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
@@ -1060,11 +1375,20 @@ function RequestsSection({ projectId, phase }: { projectId: string; phase: strin
                     </div>
                     <p className="text-xs text-muted-foreground mt-1 line-clamp-1 ml-6">{req.content}</p>
                   </div>
+                  {/* Inline attachment thumbnails when collapsed */}
+                  {expandedReq !== req.id && attachments.length > 0 && (
+                    <div className="ml-6 mt-2" onClick={(e) => e.stopPropagation()}>
+                      <AttachmentDisplay urls={attachments} compact />
+                    </div>
+                  )}
                   {expandedReq === req.id && (
                     <div className="mt-3 pt-3 border-t space-y-3 ml-6">
                       <p className="text-sm">{req.content}</p>
-                      {/* 첨부 이미지 */}
+                      {/* 첨부 이미지 + 드래그앤드롭 + 붙여넣기 */}
                       {attachments.length > 0 && <AttachmentPreviewGrid attachments={attachments} />}
+                      <FileDropZone projectId={projectId} phase={phase} subCategory="요청첨부" acceptFiles
+                        existingUrls={attachments}
+                        onUploaded={(urls) => updateRequestMutation.mutate({ id: req.id, data: { attachments: JSON.stringify(urls) } })} />
                       <div className="flex items-center gap-2 flex-wrap">
                         {isPM && (
                           <>
@@ -1076,11 +1400,6 @@ function RequestsSection({ projectId, phase }: { projectId: string; phase: strin
                             </select>
                           </>
                         )}
-                        <label className="text-xs text-primary cursor-pointer hover:underline ml-auto">
-                          {uploadingReq ? "업로드 중..." : "파일 첨부"}
-                          <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => { if (e.target.files) handleReqFileUpload(req.id, e.target.files); }} />
-                        </label>
-                        <span className="text-xs text-muted-foreground">Ctrl+V 붙여넣기 가능</span>
                       </div>
                       {/* 수정/삭제 버튼 */}
                       <div className="flex items-center gap-2">
@@ -1162,14 +1481,14 @@ function RequestsSection({ projectId, phase }: { projectId: string; phase: strin
 }
 
 // ─── Sortable Task Item ──────────────────────────────────────
-function SortableTaskItem({ task, isExpanded, onToggle, progress, onProgressChange, onProgressCommit, onStatusChange, onEdit, onDelete, onUpdateTask, photos, projectId }: {
+function SortableTaskItem({ task, isExpanded, onToggle, progress, onProgressChange, onProgressCommit, onStatusChange, onEdit, onDelete, onUpdateTask, photos, projectId, reorderMode }: {
   task: ConstructionTask; isExpanded: boolean; onToggle: () => void;
   progress: number; onProgressChange: (v: number) => void; onProgressCommit: (v: number) => void;
   onStatusChange: (s: string) => void; onEdit: () => void; onDelete: () => void;
-  onUpdateTask: (data: any) => void; photos: Photo[]; projectId: string;
+  onUpdateTask: (data: any) => void; photos: Photo[]; projectId: string; reorderMode: boolean;
 }) {
   const { toast } = useToast();
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id, disabled: !reorderMode });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
 
   const t = task as any;
@@ -1199,9 +1518,11 @@ function SortableTaskItem({ task, isExpanded, onToggle, progress, onProgressChan
   return (
     <div ref={setNodeRef} style={style} className="p-3 rounded-lg border bg-background">
       <div className="flex items-start gap-2">
-        <button {...attributes} {...listeners} className="mt-1 cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground touch-none">
-          <GripVertical className="w-4 h-4" />
-        </button>
+        {reorderMode && (
+          <button {...attributes} {...listeners} className="mt-1 cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground touch-none">
+            <GripVertical className="w-4 h-4" />
+          </button>
+        )}
         <div className="flex-1 min-w-0">
           <div className="cursor-pointer" onClick={onToggle}>
             <div className="flex items-center gap-2 flex-wrap mb-2">
@@ -1218,6 +1539,17 @@ function SortableTaskItem({ task, isExpanded, onToggle, progress, onProgressChan
               <span className="text-xs font-medium w-10 text-right">{progress}%</span>
             </div>
             {(task.startDate || task.endDate) && <p className="text-xs text-muted-foreground mt-1">{task.startDate} ~ {task.endDate}</p>}
+            {/* 축소 상태에서도 사진 미리보기 */}
+            {!isExpanded && taskPhotos.length > 0 && (
+              <div className="flex gap-1 mt-2 overflow-x-auto">
+                {taskPhotos.slice(0, 6).map((ph) => (
+                  <div key={ph.id} className="w-12 h-12 rounded overflow-hidden border shrink-0">
+                    <img src={ph.imageUrl} alt="" className="w-full h-full object-cover" />
+                  </div>
+                ))}
+                {taskPhotos.length > 6 && <div className="w-12 h-12 rounded border flex items-center justify-center text-xs text-muted-foreground shrink-0">+{taskPhotos.length - 6}</div>}
+              </div>
+            )}
           </div>
           {isExpanded && (
             <div className="mt-3 pt-3 border-t space-y-3">
@@ -1319,6 +1651,7 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
   const [expandedDefect, setExpandedDefect] = useState<string | null>(null);
   const [localProgress, setLocalProgress] = useState<Record<string, number>>({});
   const [editTask, setEditTask] = useState<ConstructionTask | null>(null);
+  const [reorderMode, setReorderMode] = useState(false);
 
   const { data: tasks } = useQuery<ConstructionTask[]>({ queryKey: [`/api/projects/${projectId}/construction-tasks`] });
   const { data: inspections } = useQuery<Inspection[]>({ queryKey: [`/api/projects/${projectId}/inspections`] });
@@ -1361,15 +1694,23 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/construction-tasks`] }); },
   });
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+
+  // Optimistic reorder with local state
+  const [optimisticTasks, setOptimisticTasks] = useState<ConstructionTask[] | null>(null);
 
   const handleDragEnd = (event: DragEndEvent) => {
+    if (!reorderMode) return;
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const oldIdx = sortedTasks.findIndex((t) => t.id === active.id);
-    const newIdx = sortedTasks.findIndex((t) => t.id === over.id);
-    const reordered = arrayMove(sortedTasks, oldIdx, newIdx);
-    reorderMutation.mutate(reordered.map((t) => t.id));
+    const source = optimisticTasks || sortedTasks;
+    const oldIdx = source.findIndex((t) => t.id === active.id);
+    const newIdx = source.findIndex((t) => t.id === over.id);
+    const reordered = arrayMove(source, oldIdx, newIdx);
+    setOptimisticTasks(reordered);
+    reorderMutation.mutate(reordered.map((t) => t.id), {
+      onSettled: () => setOptimisticTasks(null),
+    });
   };
 
   const checkMutation = useMutation({
@@ -1570,30 +1911,9 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
                             <AttachmentPreviewGrid attachments={cAttachments} />
                           </div>
                         )}
-                        <div className="mt-1">
-                          <label className="text-xs text-primary cursor-pointer hover:underline">
-                            사진/파일 첨부
-                            <input type="file" accept="image/*" multiple className="hidden" onChange={async (e) => {
-                              const files = e.target.files;
-                              if (!files?.length) return;
-                              try {
-                                const fd = new FormData();
-                                for (const f of Array.from(files).slice(0, 10)) fd.append("photos", f);
-                                fd.append("phase", "CONSTRUCTION");
-                                fd.append("subCategory", "체크리스트첨부");
-                                const res = await fetch(`${API_BASE}/api/projects/${projectId}/photos/upload`, {
-                                  method: "POST", headers: { Authorization: `Bearer ${getAuthToken()}` }, body: fd,
-                                });
-                                if (!res.ok) throw new Error("업로드 실패");
-                                const uploaded = await res.json();
-                                const urls = uploaded.map((p: any) => p.imageUrl);
-                                toggleCheckMutation.mutate({ id: item.id, attachments: JSON.stringify([...cAttachments, ...urls]) });
-                                toast({ title: "파일이 첨부되었습니다" });
-                              } catch { toast({ title: "업로드 실패", variant: "destructive" }); }
-                              e.target.value = "";
-                            }} />
-                          </label>
-                        </div>
+                        <ImageDropZone projectId={projectId} phase="CONSTRUCTION" subCategory="체크리스트첨부"
+                          existingUrls={cAttachments}
+                          onUploaded={(urls) => toggleCheckMutation.mutate({ id: item.id, attachments: JSON.stringify(urls) })} />
                       </div>
                     </div>
                   </div>
@@ -1610,6 +1930,11 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="flex items-center gap-2"><HardHat className="w-5 h-5" /> 공정 목록</CardTitle>
           <div className="flex gap-2">
+            <Button size="sm" variant={reorderMode ? "default" : "outline"}
+              onClick={() => setReorderMode(!reorderMode)}>
+              <ArrowUpDown className="w-4 h-4 mr-1" />
+              {reorderMode ? "순서변경 완료" : "순서 변경"}
+            </Button>
             <Dialog open={bulkDialogOpen} onOpenChange={(o) => { setBulkDialogOpen(o); if (!o) setBulkSelected(new Set()); }}>
               <DialogTrigger asChild><Button size="sm" variant="outline">일괄 추가</Button></DialogTrigger>
               <DialogContent className="max-h-[70vh] overflow-y-auto">
@@ -1643,11 +1968,24 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
                 <DialogHeader><DialogTitle>공정 추가</DialogTitle></DialogHeader>
                 <form onSubmit={(e) => {
                   e.preventDefault(); const fd = new FormData(e.currentTarget);
+                  const category = fd.get("category") as string;
+                  // Calculate sort order based on category priority
+                  const catPriority = CONSTRUCTION_CATEGORY_PRIORITY[category] ?? 500;
+                  const existing = sortedTasks;
+                  // Find the right position: after last task with lower/equal priority
+                  let insertOrder = (tasks?.length ?? 0) + 1;
+                  for (let i = existing.length - 1; i >= 0; i--) {
+                    const existingPriority = CONSTRUCTION_CATEGORY_PRIORITY[existing[i].category] ?? 500;
+                    if (existingPriority <= catPriority) {
+                      insertOrder = existing[i].sortOrder + 1;
+                      break;
+                    }
+                  }
                   taskMutation.mutate({
                     title: fd.get("title"), description: fd.get("description") || null,
-                    category: fd.get("category"), status: "NOT_STARTED", progress: 0,
+                    category, status: "NOT_STARTED", progress: 0,
                     startDate: fd.get("startDate") || null, endDate: fd.get("endDate") || null,
-                    assignee: fd.get("assignee") || null, sortOrder: (tasks?.length ?? 0) + 1,
+                    assignee: fd.get("assignee") || null, sortOrder: insertOrder,
                   });
                 }} className="space-y-4">
                   <div className="space-y-2"><Label>공종</Label>
@@ -1669,13 +2007,19 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
           </div>
         </CardHeader>
         <CardContent>
+          {reorderMode && (
+            <div className="mb-3 p-2 rounded-lg bg-primary/10 border border-primary/30 text-sm text-primary flex items-center gap-2">
+              <ArrowUpDown className="w-4 h-4" />
+              순서 변경 모드: 왼쪽 핸들을 드래그하여 순서를 변경하세요
+            </div>
+          )}
           {!sortedTasks.length ? (
             <p className="text-sm text-muted-foreground text-center py-4">등록된 공정이 없습니다</p>
           ) : (
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-              <SortableContext items={sortedTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+              <SortableContext items={(optimisticTasks || sortedTasks).map((t) => t.id)} strategy={verticalListSortingStrategy}>
                 <div className="space-y-3">
-                  {sortedTasks.map((task) => (
+                  {(optimisticTasks || sortedTasks).map((task) => (
                     <SortableTaskItem key={task.id} task={task}
                       isExpanded={expandedTask === task.id}
                       onToggle={() => setExpandedTask(expandedTask === task.id ? null : task.id)}
@@ -1688,6 +2032,7 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
                       onUpdateTask={(data) => updateTaskMutation.mutate({ id: task.id, data })}
                       photos={constructionPhotos}
                       projectId={projectId}
+                      reorderMode={reorderMode}
                     />
                   ))}
                 </div>
@@ -1874,18 +2219,32 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
   const [dialogOpen, setDialogOpen] = useState(false);
   const [logDialogOpen, setLogDialogOpen] = useState(false);
   const [selectedPreset, setSelectedPreset] = useState("");
+  const [newSchedAttachments, setNewSchedAttachments] = useState<string[]>([]);
+  const [newLogAttachments, setNewLogAttachments] = useState<string[]>([]);
+  const [expandedSchedule, setExpandedSchedule] = useState<string | null>(null);
+  const [expandedLog, setExpandedLog] = useState<string | null>(null);
 
   const { data: schedules } = useQuery<Schedule[]>({ queryKey: [`/api/projects/${projectId}/schedules`] });
   const { data: dailyLogs } = useQuery<DailyLog[]>({ queryKey: [`/api/projects/${projectId}/daily-logs`] });
 
   const scheduleMutation = useMutation({
     mutationFn: async (data: any) => { await apiRequest("POST", `/api/projects/${projectId}/schedules`, data); },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/schedules`] }); toast({ title: "일정이 추가되었습니다" }); setDialogOpen(false); setSelectedPreset(""); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/schedules`] }); toast({ title: "일정이 추가되었습니다" }); setDialogOpen(false); setSelectedPreset(""); setNewSchedAttachments([]); },
+  });
+
+  const updateScheduleMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: any }) => { await apiRequest("PATCH", `/api/schedules/${id}`, data); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/schedules`] }); },
   });
 
   const logMutation = useMutation({
     mutationFn: async (data: any) => { await apiRequest("POST", `/api/projects/${projectId}/daily-logs`, data); },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/daily-logs`] }); toast({ title: "작업일지가 추가되었습니다" }); setLogDialogOpen(false); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/daily-logs`] }); toast({ title: "작업일지가 추가되었습니다" }); setLogDialogOpen(false); setNewLogAttachments([]); },
+  });
+
+  const updateLogMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: any }) => { await apiRequest("PATCH", `/api/daily-logs/${id}`, data); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/daily-logs`] }); },
   });
 
   const presetData = selectedPreset ? SCHEDULE_PRESETS.find((p) => p.title === selectedPreset) : null;
@@ -1895,7 +2254,7 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="flex items-center gap-2"><Calendar className="w-5 h-5" /> 일정</CardTitle>
-          <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if (!o) setSelectedPreset(""); }}>
+          <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if (!o) { setSelectedPreset(""); setNewSchedAttachments([]); } }}>
             <DialogTrigger asChild><Button size="sm"><Plus className="w-4 h-4 mr-1" />추가</Button></DialogTrigger>
             <DialogContent>
               <DialogHeader><DialogTitle>일정 추가</DialogTitle></DialogHeader>
@@ -1915,6 +2274,7 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
                   phase: currentPhase, title: fd.get("title"), date: fd.get("date"),
                   category: fd.get("category"), memo: fd.get("memo") || null,
                   location: fd.get("location") || null, time: fd.get("time") || null,
+                  attachments: newSchedAttachments.length ? JSON.stringify(newSchedAttachments) : null,
                 });
               }} className="space-y-4">
                 <div className="space-y-2"><Label>제목</Label>
@@ -1933,6 +2293,11 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
                   </select>
                 </div>
                 <div className="space-y-2"><Label>메모</Label><Textarea name="memo" /></div>
+                <div className="space-y-2">
+                  <Label>첨부파일</Label>
+                  <FileDropZone projectId={projectId} phase={currentPhase} subCategory="일정첨부" acceptFiles
+                    existingUrls={newSchedAttachments} onUploaded={setNewSchedAttachments} />
+                </div>
                 <Button type="submit" disabled={scheduleMutation.isPending}>저장</Button>
               </form>
             </DialogContent>
@@ -1943,26 +2308,47 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
             <p className="text-sm text-muted-foreground text-center py-6">등록된 일정이 없습니다</p>
           ) : (
             <div className="space-y-2">
-              {schedules.sort((a, b) => a.date.localeCompare(b.date)).map((s) => (
-                <div key={s.id} className="flex items-start gap-3 p-3 rounded-lg border">
-                  <div className="text-sm text-muted-foreground whitespace-nowrap">
-                    <div>{s.date}</div>
-                    {(s as any).time && <div className="text-xs">{(s as any).time}</div>}
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">{s.title}</span>
-                      <Badge variant="outline" className={getScheduleCategoryColor(s.category)}>{getCategoryLabel(s.category)}</Badge>
+              {schedules.sort((a, b) => a.date.localeCompare(b.date)).map((s) => {
+                const sAttachments: string[] = (s as any).attachments ? JSON.parse((s as any).attachments) : [];
+                const isExpanded = expandedSchedule === s.id;
+                return (
+                <div key={s.id} className="p-3 rounded-lg border">
+                  <div className="flex items-start gap-3 cursor-pointer" onClick={() => setExpandedSchedule(isExpanded ? null : s.id)}>
+                    <div className="text-sm text-muted-foreground whitespace-nowrap">
+                      <div>{s.date}</div>
+                      {(s as any).time && <div className="text-xs">{(s as any).time}</div>}
                     </div>
-                    {(s as any).location && (
-                      <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                        <MapPin className="w-3 h-3" />{(s as any).location}
-                      </p>
-                    )}
-                    {s.memo && <p className="text-xs text-muted-foreground mt-0.5">{s.memo}</p>}
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">{s.title}</span>
+                        <Badge variant="outline" className={getScheduleCategoryColor(s.category)}>{getCategoryLabel(s.category)}</Badge>
+                        {sAttachments.length > 0 && <span className="text-xs text-muted-foreground"><Camera className="w-3 h-3 inline" /> {sAttachments.length}</span>}
+                      </div>
+                      {(s as any).location && (
+                        <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                          <MapPin className="w-3 h-3" />{(s as any).location}
+                        </p>
+                      )}
+                      {s.memo && <p className="text-xs text-muted-foreground mt-0.5">{s.memo}</p>}
+                    </div>
                   </div>
+                  {/* Inline attachments when collapsed */}
+                  {!isExpanded && sAttachments.length > 0 && (
+                    <div className="mt-2 ml-16" onClick={(e) => e.stopPropagation()}>
+                      <AttachmentDisplay urls={sAttachments} compact />
+                    </div>
+                  )}
+                  {/* Expanded: editable attachments */}
+                  {isExpanded && (
+                    <div className="mt-3 pt-3 border-t ml-16" onClick={(e) => e.stopPropagation()}>
+                      <FileDropZone projectId={projectId} phase={currentPhase} subCategory="일정첨부" acceptFiles
+                        existingUrls={sAttachments}
+                        onUploaded={(urls) => updateScheduleMutation.mutate({ id: s.id, data: { attachments: JSON.stringify(urls) } })} />
+                    </div>
+                  )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>
@@ -1971,7 +2357,7 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>작업일지</CardTitle>
-          <Dialog open={logDialogOpen} onOpenChange={setLogDialogOpen}>
+          <Dialog open={logDialogOpen} onOpenChange={(o) => { setLogDialogOpen(o); if (!o) setNewLogAttachments([]); }}>
             <DialogTrigger asChild><Button size="sm"><Plus className="w-4 h-4 mr-1" />추가</Button></DialogTrigger>
             <DialogContent>
               <DialogHeader><DialogTitle>작업일지 작성</DialogTitle></DialogHeader>
@@ -1980,6 +2366,7 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
                 logMutation.mutate({
                   phase: currentPhase, date: fd.get("date"), content: fd.get("content"),
                   weather: fd.get("weather") || null, workers: fd.get("workers") ? parseInt(fd.get("workers") as string) : null,
+                  attachments: newLogAttachments.length ? JSON.stringify(newLogAttachments) : null,
                 });
               }} className="space-y-4">
                 <div className="space-y-2"><Label>날짜</Label><DateInput name="date" required /></div>
@@ -1987,6 +2374,11 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2"><Label>날씨</Label><Input name="weather" placeholder="맑음" /></div>
                   <div className="space-y-2"><Label>작업인원</Label><Input name="workers" type="number" /></div>
+                </div>
+                <div className="space-y-2">
+                  <Label>첨부파일</Label>
+                  <FileDropZone projectId={projectId} phase={currentPhase} subCategory="일지첨부" acceptFiles
+                    existingUrls={newLogAttachments} onUploaded={setNewLogAttachments} />
                 </div>
                 <Button type="submit" disabled={logMutation.isPending}>저장</Button>
               </form>
@@ -1998,16 +2390,35 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
             <p className="text-sm text-muted-foreground text-center py-6">작성된 작업일지가 없습니다</p>
           ) : (
             <div className="space-y-3">
-              {dailyLogs.sort((a, b) => b.date.localeCompare(a.date)).map((log) => (
+              {dailyLogs.sort((a, b) => b.date.localeCompare(a.date)).map((log) => {
+                const logAttachments: string[] = (log as any).attachments ? JSON.parse((log as any).attachments) : [];
+                const isLogExpanded = expandedLog === log.id;
+                return (
                 <div key={log.id} className="p-3 rounded-lg border">
-                  <div className="flex items-center gap-3 mb-2">
+                  <div className="flex items-center gap-3 mb-2 cursor-pointer" onClick={() => setExpandedLog(isLogExpanded ? null : log.id)}>
                     <span className="text-sm font-medium">{log.date}</span>
                     {log.weather && <span className="text-xs text-muted-foreground flex items-center gap-1"><Cloud className="w-3 h-3" />{log.weather}</span>}
                     {log.workers != null && <span className="text-xs text-muted-foreground flex items-center gap-1"><Users className="w-3 h-3" />{log.workers}명</span>}
+                    {logAttachments.length > 0 && <span className="text-xs text-muted-foreground"><Camera className="w-3 h-3 inline" /> {logAttachments.length}</span>}
                   </div>
                   <p className="text-sm">{log.content}</p>
+                  {/* Inline attachments */}
+                  {!isLogExpanded && logAttachments.length > 0 && (
+                    <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+                      <AttachmentDisplay urls={logAttachments} compact />
+                    </div>
+                  )}
+                  {/* Expanded: editable attachments */}
+                  {isLogExpanded && (
+                    <div className="mt-3 pt-3 border-t" onClick={(e) => e.stopPropagation()}>
+                      <FileDropZone projectId={projectId} phase={currentPhase} subCategory="일지첨부" acceptFiles
+                        existingUrls={logAttachments}
+                        onUploaded={(urls) => updateLogMutation.mutate({ id: log.id, data: { attachments: JSON.stringify(urls) } })} />
+                    </div>
+                  )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>
@@ -2583,7 +2994,7 @@ export default function ProjectDetail() {
             <TabsTrigger value="photos">사진</TabsTrigger>
           </TabsList>
           <TabsContent value="overview"><OverviewTab project={project} /></TabsContent>
-          <TabsContent value="design"><DesignTab projectId={project.id} /></TabsContent>
+          <TabsContent value="design"><DesignTab projectId={project.id} project={project} /></TabsContent>
           <TabsContent value="construction"><ConstructionTab projectId={project.id} project={project} /></TabsContent>
           <TabsContent value="schedule"><ScheduleTab projectId={project.id} currentPhase={project.currentPhase} /></TabsContent>
           <TabsContent value="files"><FilesTab projectId={project.id} currentPhase={project.currentPhase} /></TabsContent>

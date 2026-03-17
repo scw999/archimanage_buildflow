@@ -226,6 +226,11 @@ export default function ProjectsPage() {
                 onClick={() => setLocation(`/projects/${project.id}`)}
                 data-testid={`project-card-${project.id}`}
               >
+                {project.coverImageUrl && (
+                  <div className="h-36 overflow-hidden rounded-t-lg">
+                    <img src={project.coverImageUrl} alt="" className="w-full h-full object-cover" />
+                  </div>
+                )}
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between">
                     <CardTitle className="text-base">{project.name}</CardTitle>

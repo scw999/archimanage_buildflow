@@ -112,6 +112,11 @@ export class PgStorage implements IStorage {
     return row;
   }
 
+  async updateSchedule(id: string, data: Partial<InsertSchedule>): Promise<Schedule | undefined> {
+    const [row] = await db.update(schedules).set(data).where(eq(schedules.id, id)).returning();
+    return row;
+  }
+
   // DailyLogs
   async getDailyLogsByProject(projectId: string): Promise<DailyLog[]> {
     return db.select().from(dailyLogs).where(eq(dailyLogs.projectId, projectId));
@@ -119,6 +124,11 @@ export class PgStorage implements IStorage {
 
   async createDailyLog(data: InsertDailyLog): Promise<DailyLog> {
     const [row] = await db.insert(dailyLogs).values(data).returning();
+    return row;
+  }
+
+  async updateDailyLog(id: string, data: Partial<InsertDailyLog>): Promise<DailyLog | undefined> {
+    const [row] = await db.update(dailyLogs).set(data).where(eq(dailyLogs.id, id)).returning();
     return row;
   }
 

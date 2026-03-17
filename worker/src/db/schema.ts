@@ -97,12 +97,13 @@ export const schedules = sqliteTable("schedules", {
   memo: text("memo"),
   location: text("location"),
   time: text("time"),
+  attachments: text("attachments"),
   createdBy: text("created_by"),
 });
 
 export const insertScheduleSchema = createInsertSchema(schedules).pick({
   projectId: true, phase: true, title: true, date: true, category: true,
-  memo: true, location: true, time: true, createdBy: true,
+  memo: true, location: true, time: true, attachments: true, createdBy: true,
 });
 export type InsertSchedule = z.infer<typeof insertScheduleSchema>;
 export type Schedule = typeof schedules.$inferSelect;
@@ -116,12 +117,13 @@ export const dailyLogs = sqliteTable("daily_logs", {
   content: text("content").notNull(),
   weather: text("weather"),
   workers: integer("workers"),
+  attachments: text("attachments"),
   createdBy: text("created_by"),
 });
 
 export const insertDailyLogSchema = createInsertSchema(dailyLogs).pick({
   projectId: true, phase: true, date: true, content: true,
-  weather: true, workers: true, createdBy: true,
+  weather: true, workers: true, attachments: true, createdBy: true,
 });
 export type InsertDailyLog = z.infer<typeof insertDailyLogSchema>;
 export type DailyLog = typeof dailyLogs.$inferSelect;

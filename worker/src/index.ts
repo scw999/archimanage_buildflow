@@ -284,6 +284,13 @@ app.post("/api/projects/:id/schedules", async (c) => {
   return c.json(schedule);
 });
 
+app.patch("/api/schedules/:id", async (c) => {
+  const db = getDb(c);
+  const [schedule] = await db.update(schema.schedules).set(await c.req.json()).where(eq(schema.schedules.id, c.req.param("id"))).returning();
+  if (!schedule) return c.json({ message: "일정을 찾을 수 없습니다" }, 404);
+  return c.json(schedule);
+});
+
 // --- Daily Logs ---
 app.get("/api/projects/:id/daily-logs", async (c) => {
   const db = getDb(c);
@@ -293,6 +300,13 @@ app.get("/api/projects/:id/daily-logs", async (c) => {
 app.post("/api/projects/:id/daily-logs", async (c) => {
   const db = getDb(c);
   const [log] = await db.insert(schema.dailyLogs).values({ ...(await c.req.json()), projectId: c.req.param("id"), createdBy: c.get("userId") }).returning();
+  return c.json(log);
+});
+
+app.patch("/api/daily-logs/:id", async (c) => {
+  const db = getDb(c);
+  const [log] = await db.update(schema.dailyLogs).set(await c.req.json()).where(eq(schema.dailyLogs.id, c.req.param("id"))).returning();
+  if (!log) return c.json({ message: "작업일지를 찾을 수 없습니다" }, 404);
   return c.json(log);
 });
 
@@ -341,38 +355,40 @@ app.post("/api/projects/:id/photos/upload", async (c) => {
   const body = await c.req.parseBody({ all: true });
   const rawFiles = body["photos"];
   const fileList = Array.isArray(rawFiles) ? rawFiles : rawFiles ? [rawFiles] : [];
-  const imageFiles = fileList.filter((f): f is File => f instanceof File && f.type.startsWith("image/"));
+  const validFiles = fileList.filter((f): f is File => f instanceof File && f.size > 0);
 
-  if (!imageFiles.length) return c.json({ message: "파일이 없습니다" }, 400);
-  if (imageFiles.length > 10) return c.json({ message: "최대 10장까지 업로드 가능합니다" }, 400);
+  if (!validFiles.length) return c.json({ message: "파일이 없습니다" }, 400);
+  if (validFiles.length > 10) return c.json({ message: "최대 10개까지 업로드 가능합니다" }, 400);
 
   const phase = (body["phase"] as string) || "CONSTRUCTION";
   const subCategory = (body["subCategory"] as string) || null;
   const publicUrl = c.env.R2_PUBLIC_URL || "";
   const results = [];
 
-  for (const file of imageFiles) {
+  for (const file of validFiles) {
     if (file.size > 20 * 1024 * 1024) continue; // skip > 20MB
 
     const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
     const rand = Math.random().toString(36).slice(2, 8);
-    const ext = file.name.split(".").pop() || "jpg";
+    const ext = file.name.split(".").pop() || "bin";
     const fileName = `${date}_${rand}.${ext}`;
 
     await c.env.R2_BUCKET.put(fileName, await file.arrayBuffer(), {
       httpMetadata: { contentType: file.type },
     });
 
-    const imageUrl = publicUrl ? `${publicUrl}/${fileName}` : `/api/photos/file/${fileName}`;
+    const workerUrl = new URL(c.req.url).origin;
+    const fileUrl = publicUrl ? `${publicUrl}/${fileName}` : `${workerUrl}/api/photos/file/${fileName}`;
     const takenAt = new Date().toISOString().slice(0, 10);
+    const isImage = file.type.startsWith("image/");
 
     const [photo] = await db.insert(schema.photos).values({
       projectId: c.req.param("id"),
       phase,
-      imageUrl,
-      thumbnailUrl: imageUrl,
+      imageUrl: fileUrl,
+      thumbnailUrl: isImage ? fileUrl : null,
       description: file.name,
-      tags: null,
+      tags: isImage ? null : "file",
       takenAt,
       subCategory,
       createdBy: userId,

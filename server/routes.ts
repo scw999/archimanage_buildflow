@@ -171,6 +171,12 @@ export async function registerRoutes(
     return res.json(schedule);
   });
 
+  app.patch("/api/schedules/:id", authMiddleware, async (req: Request, res: Response) => {
+    const schedule = await storage.updateSchedule(req.params.id, req.body);
+    if (!schedule) return res.status(404).json({ message: "일정을 찾을 수 없습니다" });
+    return res.json(schedule);
+  });
+
   // Daily Logs
   app.get("/api/projects/:id/daily-logs", authMiddleware, async (req: Request, res: Response) => {
     const logs = await storage.getDailyLogsByProject(req.params.id);
@@ -180,6 +186,12 @@ export async function registerRoutes(
   app.post("/api/projects/:id/daily-logs", authMiddleware, async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const log = await storage.createDailyLog({ ...req.body, projectId: req.params.id, createdBy: userId });
+    return res.json(log);
+  });
+
+  app.patch("/api/daily-logs/:id", authMiddleware, async (req: Request, res: Response) => {
+    const log = await storage.updateDailyLog(req.params.id, req.body);
+    if (!log) return res.status(404).json({ message: "작업일지를 찾을 수 없습니다" });
     return res.json(log);
   });
 
