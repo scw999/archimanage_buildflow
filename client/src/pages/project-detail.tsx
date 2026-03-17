@@ -209,7 +209,7 @@ import {
   Cloud, Users, CheckCircle2, ClipboardList,
   HardHat, AlertTriangle, Search, MessageSquare,
   FolderTree, ChevronDown, ChevronRight, Building2, Ruler, Layers, Trash2,
-  GripVertical, Pencil, Download, ArrowUpDown, Image as ImageIcon
+  GripVertical, Pencil, ArrowUpDown, Image as ImageIcon, Clock
 } from "lucide-react";
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
@@ -879,6 +879,7 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
   const [changeDialogOpen, setChangeDialogOpen] = useState(false);
   const [selectedChange, setSelectedChange] = useState<DesignChange | null>(null);
   const [showAllFloors, setShowAllFloors] = useState(false);
+  const [designLightbox, setDesignLightbox] = useState<string | null>(null);
 
   const { data: allDesignChecks } = useQuery<DesignCheck[]>({ queryKey: [`/api/projects/${projectId}/design-checks`] });
   const designChecks = allDesignChecks?.filter((c) => (c as any).phase === "DESIGN" || !(c as any).phase) ?? [];
@@ -960,27 +961,30 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
       <Card>
         <CardHeader><CardTitle className="flex items-center gap-2"><Layers className="w-5 h-5" /> 평면도</CardTitle></CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {visibleFloorSlots.map((slot) => {
               const slotPhotos = getSlotPhotos(slot);
               const label = slot.replace("평면도-", "");
               return (
-                <div key={slot} className="space-y-1.5">
-                  <p className="text-xs font-semibold text-center">{label}</p>
+                <div key={slot} className="space-y-2">
+                  <p className="text-sm font-semibold">{label}</p>
                   {slotPhotos.length > 0 ? (
-                    <div className="space-y-1.5">
+                    <div className="space-y-2">
                       {slotPhotos.map((p) => (
-                        <AttachmentPreviewGrid key={p.id} attachments={[p.imageUrl]} />
+                        <button key={p.id} type="button" className="w-full aspect-[4/3] rounded-lg overflow-hidden border hover:opacity-90 transition-opacity"
+                          onClick={() => setDesignLightbox(p.imageUrl)}>
+                          <img src={p.imageUrl} alt={label} className="w-full h-full object-cover" />
+                        </button>
                       ))}
                     </div>
                   ) : (
                     <div className="aspect-[4/3] rounded-lg border-2 border-dashed border-muted flex items-center justify-center">
-                      <ImageIcon className="w-8 h-8 text-muted-foreground/30" />
+                      <ImageIcon className="w-10 h-10 text-muted-foreground/30" />
                     </div>
                   )}
                   <FileDropZone projectId={projectId} phase="DESIGN" subCategory={slot} acceptFiles
                     existingUrls={[]} onUploaded={() => queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/photos`] })}>
-                    <span className="text-[10px] text-muted-foreground">추가</span>
+                    <span className="text-xs text-muted-foreground">사진/파일 추가</span>
                   </FileDropZone>
                 </div>
               );
@@ -1000,27 +1004,30 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
       <Card>
         <CardHeader><CardTitle className="flex items-center gap-2"><Building2 className="w-5 h-5" /> 입면도</CardTitle></CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {elevationSlots.map((slot) => {
               const slotPhotos = getSlotPhotos(slot);
               const label = slot.replace("입면도-", "");
               return (
-                <div key={slot} className="space-y-1.5">
-                  <p className="text-xs font-semibold text-center">{label}</p>
+                <div key={slot} className="space-y-2">
+                  <p className="text-sm font-semibold">{label}</p>
                   {slotPhotos.length > 0 ? (
-                    <div className="space-y-1.5">
+                    <div className="space-y-2">
                       {slotPhotos.map((p) => (
-                        <AttachmentPreviewGrid key={p.id} attachments={[p.imageUrl]} />
+                        <button key={p.id} type="button" className="w-full aspect-[4/3] rounded-lg overflow-hidden border hover:opacity-90 transition-opacity"
+                          onClick={() => setDesignLightbox(p.imageUrl)}>
+                          <img src={p.imageUrl} alt={label} className="w-full h-full object-cover" />
+                        </button>
                       ))}
                     </div>
                   ) : (
                     <div className="aspect-[4/3] rounded-lg border-2 border-dashed border-muted flex items-center justify-center">
-                      <ImageIcon className="w-8 h-8 text-muted-foreground/30" />
+                      <ImageIcon className="w-10 h-10 text-muted-foreground/30" />
                     </div>
                   )}
                   <FileDropZone projectId={projectId} phase="DESIGN" subCategory={slot} acceptFiles
                     existingUrls={[]} onUploaded={() => queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/photos`] })}>
-                    <span className="text-[10px] text-muted-foreground">추가</span>
+                    <span className="text-xs text-muted-foreground">사진/파일 추가</span>
                   </FileDropZone>
                 </div>
               );
@@ -1225,6 +1232,18 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
 
       {/* 건축주 요청사항 (설계 단계) */}
       <RequestsSection projectId={projectId} phase="DESIGN" />
+
+      {/* 설계 도면 라이트박스 */}
+      {designLightbox && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => setDesignLightbox(null)}>
+          <div className="relative max-w-5xl max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
+            <Button variant="ghost" size="icon" className="absolute -top-10 right-0 text-white hover:text-white/80" onClick={() => setDesignLightbox(null)}>
+              <X className="w-6 h-6" />
+            </Button>
+            <img src={designLightbox} alt="" className="max-w-full max-h-[85vh] object-contain rounded-lg" />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1379,7 +1398,7 @@ function RequestsSection({ projectId, phase }: { projectId: string; phase: strin
                   {/* Inline attachment thumbnails when collapsed */}
                   {expandedReq !== req.id && attachments.length > 0 && (
                     <div className="ml-6 mt-2" onClick={(e) => e.stopPropagation()}>
-                      <AttachmentDisplay urls={attachments} compact />
+                      <AttachmentPreviewGrid attachments={attachments} />
                     </div>
                   )}
                   {expandedReq === req.id && (
@@ -1542,13 +1561,13 @@ function SortableTaskItem({ task, isExpanded, onToggle, progress, onProgressChan
             {(task.startDate || task.endDate) && <p className="text-xs text-muted-foreground mt-1">{task.startDate} ~ {task.endDate}</p>}
             {/* 축소 상태에서도 사진 미리보기 */}
             {!isExpanded && taskPhotos.length > 0 && (
-              <div className="flex gap-1 mt-2 overflow-x-auto">
-                {taskPhotos.slice(0, 6).map((ph) => (
-                  <div key={ph.id} className="w-12 h-12 rounded overflow-hidden border shrink-0">
+              <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5 mt-2">
+                {taskPhotos.slice(0, 15).map((ph) => (
+                  <div key={ph.id} className="aspect-square rounded-lg overflow-hidden border">
                     <img src={ph.imageUrl} alt="" className="w-full h-full object-cover" />
                   </div>
                 ))}
-                {taskPhotos.length > 6 && <div className="w-12 h-12 rounded border flex items-center justify-center text-xs text-muted-foreground shrink-0">+{taskPhotos.length - 6}</div>}
+                {taskPhotos.length > 15 && <div className="aspect-square rounded-lg border flex items-center justify-center text-sm font-medium text-muted-foreground">+{taskPhotos.length - 15}</div>}
               </div>
             )}
           </div>
@@ -1621,13 +1640,12 @@ function SortableTaskItem({ task, isExpanded, onToggle, progress, onProgressChan
                   </label>
                 </div>
                 {taskPhotos.length > 0 && (
-                  <div className="grid grid-cols-4 gap-1">
-                    {taskPhotos.slice(0, 8).map((ph) => (
-                      <div key={ph.id} className="aspect-square rounded overflow-hidden border">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {taskPhotos.map((ph) => (
+                      <div key={ph.id} className="aspect-[4/3] rounded-lg overflow-hidden border">
                         <img src={ph.imageUrl} alt="" className="w-full h-full object-cover" />
                       </div>
                     ))}
-                    {taskPhotos.length > 8 && <div className="aspect-square rounded border flex items-center justify-center text-xs text-muted-foreground">+{taskPhotos.length - 8}</div>}
                   </div>
                 )}
               </div>
@@ -1973,12 +1991,12 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
                   // Calculate sort order based on category priority
                   const catPriority = CONSTRUCTION_CATEGORY_PRIORITY[category] ?? 500;
                   const existing = sortedTasks;
-                  // Find the right position: after last task with lower/equal priority
+                  // Find the right position: before the first task with equal or higher priority
                   let insertOrder = (tasks?.length ?? 0) + 1;
-                  for (let i = existing.length - 1; i >= 0; i--) {
+                  for (let i = 0; i < existing.length; i++) {
                     const existingPriority = CONSTRUCTION_CATEGORY_PRIORITY[existing[i].category] ?? 500;
-                    if (existingPriority <= catPriority) {
-                      insertOrder = existing[i].sortOrder + 1;
+                    if (existingPriority >= catPriority) {
+                      insertOrder = existing[i].sortOrder;
                       break;
                     }
                   }
@@ -2284,10 +2302,10 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2"><Label>날짜</Label><DateInput name="date" required /></div>
                   <div className="space-y-2">
-                    <Label className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" />시간</Label>
+                    <Label>시간</Label>
                     <div className="relative">
                       <Input name="time" type="time" className="pl-9 cursor-pointer" />
-                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                      <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                     </div>
                   </div>
                 </div>
