@@ -133,8 +133,8 @@ function AttachmentDisplay({ urls, onRemove, compact = false }: {
 }) {
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   if (!urls.length) return null;
-  const gridCls = compact ? "grid grid-cols-6 gap-1" : "grid grid-cols-4 gap-1.5";
-  const sizeCls = compact ? "w-10 h-10" : "aspect-square";
+  const gridCls = compact ? "grid grid-cols-4 sm:grid-cols-6 gap-1.5" : "grid grid-cols-2 sm:grid-cols-3 gap-2";
+  const sizeCls = compact ? "w-16 h-16" : "aspect-square";
   return (
     <>
       <div className={gridCls}>
@@ -279,14 +279,15 @@ function AttachmentPreviewGrid({ attachments }: { attachments: string[] }) {
 
   return (
     <>
-      <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
         {attachments.map((url, i) => {
           const isImage = isImageLikeUrl(url);
+          const fileName = decodeURIComponent(url.split("/").pop()?.split("?")[0] || "파일");
           return isImage ? (
             <button
               key={`${url}-${i}`}
               type="button"
-              className="aspect-square rounded overflow-hidden border hover:opacity-90 transition-opacity"
+              className="aspect-[4/3] rounded-lg overflow-hidden border hover:opacity-90 transition-opacity"
               onClick={() => setLightboxUrl(url)}
             >
               <img src={url} alt="attachment" className="w-full h-full object-cover" />
@@ -298,10 +299,10 @@ function AttachmentPreviewGrid({ attachments }: { attachments: string[] }) {
               download
               target="_blank"
               rel="noopener noreferrer"
-              className="aspect-square rounded border p-3 flex flex-col items-center justify-center gap-2 hover:bg-muted/40 transition-colors"
+              className="rounded-lg border p-3 flex items-center gap-2 hover:bg-muted/40 transition-colors"
             >
-              <FileText className="w-6 h-6 text-muted-foreground" />
-              <span className="text-[11px] text-center text-muted-foreground line-clamp-3 break-all">파일 다운로드</span>
+              <FileText className="w-5 h-5 text-muted-foreground shrink-0" />
+              <span className="text-xs text-muted-foreground line-clamp-2 break-all">{fileName}</span>
             </a>
           );
         })}
@@ -620,8 +621,8 @@ function OverviewTab({ project }: { project: Project }) {
           {/* 대표 사진 */}
           <div>
             {project.coverImageUrl ? (
-              <div className="relative rounded-lg overflow-hidden border mb-3 max-h-48">
-                <img src={project.coverImageUrl} alt="대표 사진" className="w-full h-48 object-cover" />
+              <div className="relative rounded-lg overflow-hidden border mb-3">
+                <img src={project.coverImageUrl} alt="대표 사진" className="w-full max-h-72 object-contain bg-muted/30" />
                 <div className="absolute bottom-2 right-2">
                   <label className="bg-black/60 text-white text-xs px-2 py-1 rounded cursor-pointer hover:bg-black/80">
                     변경
@@ -959,22 +960,22 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
       <Card>
         <CardHeader><CardTitle className="flex items-center gap-2"><Layers className="w-5 h-5" /> 평면도</CardTitle></CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             {visibleFloorSlots.map((slot) => {
               const slotPhotos = getSlotPhotos(slot);
               const label = slot.replace("평면도-", "");
               return (
-                <div key={slot} className="space-y-1">
-                  <p className="text-xs font-medium text-center text-muted-foreground">{label}</p>
+                <div key={slot} className="space-y-1.5">
+                  <p className="text-xs font-semibold text-center">{label}</p>
                   {slotPhotos.length > 0 ? (
-                    <div className="space-y-1">
+                    <div className="space-y-1.5">
                       {slotPhotos.map((p) => (
-                        <AttachmentDisplay key={p.id} urls={[p.imageUrl]} />
+                        <AttachmentPreviewGrid key={p.id} attachments={[p.imageUrl]} />
                       ))}
                     </div>
                   ) : (
-                    <div className="aspect-square rounded-lg border-2 border-dashed border-muted flex items-center justify-center">
-                      <ImageIcon className="w-6 h-6 text-muted-foreground/40" />
+                    <div className="aspect-[4/3] rounded-lg border-2 border-dashed border-muted flex items-center justify-center">
+                      <ImageIcon className="w-8 h-8 text-muted-foreground/30" />
                     </div>
                   )}
                   <FileDropZone projectId={projectId} phase="DESIGN" subCategory={slot} acceptFiles
@@ -999,22 +1000,22 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
       <Card>
         <CardHeader><CardTitle className="flex items-center gap-2"><Building2 className="w-5 h-5" /> 입면도</CardTitle></CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             {elevationSlots.map((slot) => {
               const slotPhotos = getSlotPhotos(slot);
               const label = slot.replace("입면도-", "");
               return (
-                <div key={slot} className="space-y-1">
-                  <p className="text-xs font-medium text-center text-muted-foreground">{label}</p>
+                <div key={slot} className="space-y-1.5">
+                  <p className="text-xs font-semibold text-center">{label}</p>
                   {slotPhotos.length > 0 ? (
-                    <div className="space-y-1">
+                    <div className="space-y-1.5">
                       {slotPhotos.map((p) => (
-                        <AttachmentDisplay key={p.id} urls={[p.imageUrl]} />
+                        <AttachmentPreviewGrid key={p.id} attachments={[p.imageUrl]} />
                       ))}
                     </div>
                   ) : (
-                    <div className="aspect-square rounded-lg border-2 border-dashed border-muted flex items-center justify-center">
-                      <ImageIcon className="w-6 h-6 text-muted-foreground/40" />
+                    <div className="aspect-[4/3] rounded-lg border-2 border-dashed border-muted flex items-center justify-center">
+                      <ImageIcon className="w-8 h-8 text-muted-foreground/30" />
                     </div>
                   )}
                   <FileDropZone projectId={projectId} phase="DESIGN" subCategory={slot} acceptFiles
@@ -1107,8 +1108,8 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
                               </div>
                             )}
                             <ImageDropZone projectId={projectId} phase="DESIGN" subCategory="체크리스트첨부"
-                              existingUrls={itemAttachments}
-                              onUploaded={(urls) => toggleCheckMutation.mutate({ id: item.id, attachments: JSON.stringify(urls) })} />
+                              existingUrls={[]}
+                              onUploaded={(urls) => toggleCheckMutation.mutate({ id: item.id, attachments: JSON.stringify([...itemAttachments, ...urls]) })} />
                           </div>
                         </div>
                       </div>
@@ -1912,8 +1913,8 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
                           </div>
                         )}
                         <ImageDropZone projectId={projectId} phase="CONSTRUCTION" subCategory="체크리스트첨부"
-                          existingUrls={cAttachments}
-                          onUploaded={(urls) => toggleCheckMutation.mutate({ id: item.id, attachments: JSON.stringify(urls) })} />
+                          existingUrls={[]}
+                          onUploaded={(urls) => toggleCheckMutation.mutate({ id: item.id, attachments: JSON.stringify([...cAttachments, ...urls]) })} />
                       </div>
                     </div>
                   </div>
@@ -2282,7 +2283,13 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2"><Label>날짜</Label><DateInput name="date" required /></div>
-                  <div className="space-y-2"><Label>시간</Label><Input name="time" type="time" /></div>
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" />시간</Label>
+                    <div className="relative">
+                      <Input name="time" type="time" className="pl-9 cursor-pointer" />
+                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                    </div>
+                  </div>
                 </div>
                 <div className="space-y-2"><Label>장소</Label><Input name="location" placeholder="예: 현장, 사무실, 강남구청" /></div>
                 <div className="space-y-2"><Label>카테고리</Label>
@@ -2335,15 +2342,16 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
                   {/* Inline attachments when collapsed */}
                   {!isExpanded && sAttachments.length > 0 && (
                     <div className="mt-2 ml-16" onClick={(e) => e.stopPropagation()}>
-                      <AttachmentDisplay urls={sAttachments} compact />
+                      <AttachmentPreviewGrid attachments={sAttachments} />
                     </div>
                   )}
-                  {/* Expanded: editable attachments */}
+                  {/* Expanded: preview + upload */}
                   {isExpanded && (
                     <div className="mt-3 pt-3 border-t ml-16" onClick={(e) => e.stopPropagation()}>
+                      {sAttachments.length > 0 && <div className="mb-2"><AttachmentPreviewGrid attachments={sAttachments} /></div>}
                       <FileDropZone projectId={projectId} phase={currentPhase} subCategory="일정첨부" acceptFiles
-                        existingUrls={sAttachments}
-                        onUploaded={(urls) => updateScheduleMutation.mutate({ id: s.id, data: { attachments: JSON.stringify(urls) } })} />
+                        existingUrls={[]}
+                        onUploaded={(urls) => updateScheduleMutation.mutate({ id: s.id, data: { attachments: JSON.stringify([...sAttachments, ...urls]) } })} />
                     </div>
                   )}
                 </div>
@@ -2405,15 +2413,16 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
                   {/* Inline attachments */}
                   {!isLogExpanded && logAttachments.length > 0 && (
                     <div className="mt-2" onClick={(e) => e.stopPropagation()}>
-                      <AttachmentDisplay urls={logAttachments} compact />
+                      <AttachmentPreviewGrid attachments={logAttachments} />
                     </div>
                   )}
-                  {/* Expanded: editable attachments */}
+                  {/* Expanded: preview + upload */}
                   {isLogExpanded && (
                     <div className="mt-3 pt-3 border-t" onClick={(e) => e.stopPropagation()}>
+                      {logAttachments.length > 0 && <div className="mb-2"><AttachmentPreviewGrid attachments={logAttachments} /></div>}
                       <FileDropZone projectId={projectId} phase={currentPhase} subCategory="일지첨부" acceptFiles
-                        existingUrls={logAttachments}
-                        onUploaded={(urls) => updateLogMutation.mutate({ id: log.id, data: { attachments: JSON.stringify(urls) } })} />
+                        existingUrls={[]}
+                        onUploaded={(urls) => updateLogMutation.mutate({ id: log.id, data: { attachments: JSON.stringify([...logAttachments, ...urls]) } })} />
                     </div>
                   )}
                 </div>

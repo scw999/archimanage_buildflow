@@ -227,7 +227,7 @@ export default function ProjectsPage() {
                 data-testid={`project-card-${project.id}`}
               >
                 {project.coverImageUrl && (
-                  <div className="h-36 overflow-hidden rounded-t-lg">
+                  <div className="h-44 overflow-hidden rounded-t-lg">
                     <img src={project.coverImageUrl} alt="" className="w-full h-full object-cover" />
                   </div>
                 )}
