@@ -200,6 +200,15 @@ export async function autoMigrate() {
       // column may already exist
     }
 
+    // Add location and time to schedules table
+    for (const col of ["location TEXT", "time TEXT"]) {
+      try {
+        await db.execute(sql.raw(`ALTER TABLE schedules ADD COLUMN IF NOT EXISTS ${col}`));
+      } catch {
+        // column may already exist
+      }
+    }
+
     console.log("[auto-migrate] Tables created/verified");
 
     // Seed admin user if not exists

@@ -1327,12 +1327,17 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
                 scheduleMutation.mutate({
                   phase: currentPhase, title: fd.get("title"), date: fd.get("date"),
                   category: fd.get("category"), memo: fd.get("memo") || null,
+                  location: fd.get("location") || null, time: fd.get("time") || null,
                 });
               }} className="space-y-4">
                 <div className="space-y-2"><Label>제목</Label>
                   <Input name="title" required defaultValue={presetData?.title || ""} key={selectedPreset} />
                 </div>
-                <div className="space-y-2"><Label>날짜</Label><DateInput name="date" required /></div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2"><Label>날짜</Label><DateInput name="date" required /></div>
+                  <div className="space-y-2"><Label>시간</Label><Input name="time" type="time" /></div>
+                </div>
+                <div className="space-y-2"><Label>장소</Label><Input name="location" placeholder="예: 현장, 사무실, 강남구청" /></div>
                 <div className="space-y-2"><Label>카테고리</Label>
                   <select name="category" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                     defaultValue={presetData?.category || "MEETING"} key={`cat-${selectedPreset}`}>
@@ -1353,13 +1358,21 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
             <div className="space-y-2">
               {schedules.sort((a, b) => a.date.localeCompare(b.date)).map((s) => (
                 <div key={s.id} className="flex items-start gap-3 p-3 rounded-lg border">
-                  <div className="text-sm text-muted-foreground whitespace-nowrap">{s.date}</div>
+                  <div className="text-sm text-muted-foreground whitespace-nowrap">
+                    <div>{s.date}</div>
+                    {(s as any).time && <div className="text-xs">{(s as any).time}</div>}
+                  </div>
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium">{s.title}</span>
                       <Badge variant="outline" className={getScheduleCategoryColor(s.category)}>{getCategoryLabel(s.category)}</Badge>
                     </div>
-                    {s.memo && <p className="text-xs text-muted-foreground mt-1">{s.memo}</p>}
+                    {(s as any).location && (
+                      <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                        <MapPin className="w-3 h-3" />{(s as any).location}
+                      </p>
+                    )}
+                    {s.memo && <p className="text-xs text-muted-foreground mt-0.5">{s.memo}</p>}
                   </div>
                 </div>
               ))}

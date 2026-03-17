@@ -466,7 +466,7 @@ export class MemStorage implements IStorage {
 
   async createSchedule(insertSchedule: InsertSchedule): Promise<Schedule> {
     const id = randomUUID();
-    const schedule: Schedule = { id, memo: null, createdBy: null, ...insertSchedule };
+    const schedule: Schedule = { id, memo: null, location: null, time: null, createdBy: null, ...insertSchedule };
     this.schedules.set(id, schedule);
     return schedule;
   }

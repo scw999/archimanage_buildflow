@@ -106,6 +106,8 @@ export const schedules = pgTable("schedules", {
   date: text("date").notNull(),
   category: text("category").notNull().$type<typeof ScheduleCategory[number]>(),
   memo: text("memo"),
+  location: text("location"),
+  time: text("time"),
   createdBy: varchar("created_by"),
 });
 
@@ -116,6 +118,8 @@ export const insertScheduleSchema = createInsertSchema(schedules).pick({
   date: true,
   category: true,
   memo: true,
+  location: true,
+  time: true,
   createdBy: true,
 });
 
