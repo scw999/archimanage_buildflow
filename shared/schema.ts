@@ -51,6 +51,8 @@ export const projects = pgTable("projects", {
   buildingCoverage: text("building_coverage"),
   floorAreaRatio: text("floor_area_ratio"),
   floors: text("floors"),
+  basementFloors: integer("basement_floors"),
+  aboveFloors: integer("above_floors"),
   structureType: text("structure_type"),
   mainUse: text("main_use"),
   specialNotes: text("special_notes"),
@@ -71,6 +73,8 @@ export const insertProjectSchema = createInsertSchema(projects).pick({
   buildingCoverage: true,
   floorAreaRatio: true,
   floors: true,
+  basementFloors: true,
+  aboveFloors: true,
   structureType: true,
   mainUse: true,
   specialNotes: true,
@@ -329,6 +333,8 @@ export const constructionTasks = pgTable("construction_tasks", {
   endDate: text("end_date"),
   assignee: text("assignee"),
   sortOrder: integer("sort_order").notNull().default(0),
+  memo: text("memo"),
+  checklist: text("checklist"),
   createdBy: varchar("created_by"),
 });
 
@@ -343,6 +349,8 @@ export const insertConstructionTaskSchema = createInsertSchema(constructionTasks
   endDate: true,
   assignee: true,
   sortOrder: true,
+  memo: true,
+  checklist: true,
   createdBy: true,
 });
 

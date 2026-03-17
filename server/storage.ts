@@ -173,6 +173,8 @@ export class MemStorage implements IStorage {
       buildingCoverage: "59.8",
       floorAreaRatio: "179.4",
       floors: "지하1층 / 지상3층",
+      basementFloors: 1,
+      aboveFloors: 3,
       structureType: "철근콘크리트조",
       mainUse: "단독주택",
       specialNotes: "자연 채광 극대화 설계, 에너지 효율 1등급 목표",
@@ -194,6 +196,8 @@ export class MemStorage implements IStorage {
       buildingCoverage: null,
       floorAreaRatio: null,
       floors: "지상1층",
+      basementFloors: 0,
+      aboveFloors: 1,
       structureType: "철골조",
       mainUse: "근린생활시설(카페)",
       specialNotes: "모던 인더스트리얼 컨셉, 좌석 40석 규모",
@@ -423,7 +427,7 @@ export class MemStorage implements IStorage {
 
   async createProject(insertProject: InsertProject): Promise<Project> {
     const id = randomUUID();
-    const project: Project = { id, createdAt: new Date(), coverImageUrl: null, description: null, clientName: null, address: null, createdBy: null, buildingArea: null, totalFloorArea: null, buildingCoverage: null, floorAreaRatio: null, floors: null, structureType: null, mainUse: null, specialNotes: null, ...insertProject };
+    const project: Project = { id, createdAt: new Date(), coverImageUrl: null, description: null, clientName: null, address: null, createdBy: null, buildingArea: null, totalFloorArea: null, buildingCoverage: null, floorAreaRatio: null, floors: null, basementFloors: null, aboveFloors: null, structureType: null, mainUse: null, specialNotes: null, ...insertProject };
     this.projects.set(id, project);
     return project;
   }
@@ -609,7 +613,7 @@ export class MemStorage implements IStorage {
 
   async createConstructionTask(insertTask: InsertConstructionTask): Promise<ConstructionTask> {
     const id = randomUUID();
-    const task: ConstructionTask = { id, description: null, progress: 0, startDate: null, endDate: null, assignee: null, sortOrder: 0, createdBy: null, ...insertTask };
+    const task: ConstructionTask = { id, description: null, progress: 0, startDate: null, endDate: null, assignee: null, sortOrder: 0, memo: null, checklist: null, createdBy: null, ...insertTask };
     this.constructionTasks.set(id, task);
     return task;
   }

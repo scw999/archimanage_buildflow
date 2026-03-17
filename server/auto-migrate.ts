@@ -193,6 +193,15 @@ export async function autoMigrate() {
       }
     }
 
+    // Add basement/above floors to projects
+    for (const col of ["basement_floors INTEGER", "above_floors INTEGER"]) {
+      try { await db.execute(sql.raw(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS ${col}`)); } catch {}
+    }
+    // Add memo/checklist to construction_tasks
+    for (const col of ["memo TEXT", "checklist TEXT"]) {
+      try { await db.execute(sql.raw(`ALTER TABLE construction_tasks ADD COLUMN IF NOT EXISTS ${col}`)); } catch {}
+    }
+
     // Add sub_category to photos table
     try {
       await db.execute(sql.raw(`ALTER TABLE photos ADD COLUMN IF NOT EXISTS sub_category TEXT`));

@@ -378,6 +378,9 @@ function OverviewTab({ project }: { project: Project }) {
             onSubmit={(e) => {
               e.preventDefault();
               const fd = new FormData(e.currentTarget);
+              const bf = parseInt(fd.get("basementFloors") as string) || 0;
+              const af = parseInt(fd.get("aboveFloors") as string) || 0;
+              const floorsText = [bf > 0 ? `지하${bf}층` : "", af > 0 ? `지상${af}층` : ""].filter(Boolean).join(" / ") || null;
               updateMutation.mutate({
                 description: fd.get("description") || null,
                 clientName: fd.get("clientName") || null,
@@ -386,7 +389,9 @@ function OverviewTab({ project }: { project: Project }) {
                 totalFloorArea: fd.get("totalFloorArea") || null,
                 buildingCoverage: fd.get("buildingCoverage") || null,
                 floorAreaRatio: fd.get("floorAreaRatio") || null,
-                floors: fd.get("floors") || null,
+                floors: floorsText,
+                basementFloors: bf,
+                aboveFloors: af,
                 structureType: fd.get("structureType") || null,
                 mainUse: fd.get("mainUse") || null,
                 specialNotes: fd.get("specialNotes") || null,
@@ -427,8 +432,16 @@ function OverviewTab({ project }: { project: Project }) {
                 <Input name="floorAreaRatio" defaultValue={p.floorAreaRatio || ""} />
               </div>
               <div className="space-y-2">
-                <Label>층수</Label>
-                <Input name="floors" placeholder="예: 지하1층/지상3층" defaultValue={p.floors || ""} />
+                <Label>지하 층수</Label>
+                <select name="basementFloors" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" defaultValue={p.basementFloors ?? 0}>
+                  {[0,1,2,3,4,5].map((n) => <option key={n} value={n}>{n === 0 ? "없음" : `지하 ${n}층`}</option>)}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label>지상 층수</Label>
+                <select name="aboveFloors" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" defaultValue={p.aboveFloors ?? 0}>
+                  {[0,1,2,3,4,5,6,7,8,9,10,15,20].map((n) => <option key={n} value={n}>{n === 0 ? "없음" : `지상 ${n}층`}</option>)}
+                </select>
               </div>
               <div className="space-y-2">
                 <Label>구조</Label>
@@ -807,13 +820,40 @@ function RequestsSection({ projectId, phase }: { projectId: string; phase: strin
 }
 
 // ─── Sortable Task Item ──────────────────────────────────────
-function SortableTaskItem({ task, isExpanded, onToggle, progress, onProgressChange, onProgressCommit, onStatusChange, onEdit, onDelete }: {
+function SortableTaskItem({ task, isExpanded, onToggle, progress, onProgressChange, onProgressCommit, onStatusChange, onEdit, onDelete, onUpdateTask, photos, projectId }: {
   task: ConstructionTask; isExpanded: boolean; onToggle: () => void;
   progress: number; onProgressChange: (v: number) => void; onProgressCommit: (v: number) => void;
   onStatusChange: (s: string) => void; onEdit: () => void; onDelete: () => void;
+  onUpdateTask: (data: any) => void; photos: Photo[]; projectId: string;
 }) {
+  const { toast } = useToast();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
+
+  const t = task as any;
+  const checklistItems: string[] = t.checklist ? JSON.parse(t.checklist) : [];
+  const taskPhotos = photos.filter((p) => (p as any).subCategory === task.category || (p as any).subCategory === task.title);
+  const [uploading, setUploading] = useState(false);
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files?.length) return;
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      for (const f of Array.from(files)) fd.append("photos", f);
+      fd.append("phase", "CONSTRUCTION");
+      fd.append("subCategory", task.category);
+      const { getAuthToken } = await import("@/lib/queryClient");
+      const res = await fetch(`/api/projects/${projectId}/photos/upload`, {
+        method: "POST", headers: { Authorization: `Bearer ${getAuthToken()}` }, body: fd,
+      });
+      if (!res.ok) throw new Error("업로드 실패");
+      queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/photos`] });
+      toast({ title: "사진이 업로드되었습니다" });
+    } catch { toast({ title: "업로드 실패", variant: "destructive" }); }
+    finally { setUploading(false); e.target.value = ""; }
+  };
 
   return (
     <div ref={setNodeRef} style={style} className="p-3 rounded-lg border bg-background">
@@ -828,6 +868,7 @@ function SortableTaskItem({ task, isExpanded, onToggle, progress, onProgressChan
               <Badge variant="outline" className="text-xs">{task.category}</Badge>
               <Badge variant="outline" className={getTaskStatusColor(task.status)}>{getTaskStatusLabel(task.status)}</Badge>
               {task.assignee && <span className="text-xs text-muted-foreground">{task.assignee}</span>}
+              {taskPhotos.length > 0 && <span className="text-xs text-muted-foreground"><Camera className="w-3 h-3 inline" /> {taskPhotos.length}</span>}
             </div>
             <div className="flex items-center gap-2">
               <div className="flex-1 bg-muted rounded-full h-2">
@@ -859,6 +900,63 @@ function SortableTaskItem({ task, isExpanded, onToggle, progress, onProgressChan
                 <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={onDelete}>
                   <Trash2 className="w-4 h-4" /></Button>
               </div>
+
+              {/* 메모 */}
+              <div className="space-y-1">
+                <Label className="text-xs">메모</Label>
+                <Textarea defaultValue={t.memo || ""} placeholder="공정 관련 메모..."
+                  onBlur={(e) => onUpdateTask({ memo: e.target.value || null })}
+                  className="text-xs min-h-[50px]" />
+              </div>
+
+              {/* 체크리스트 */}
+              <div className="space-y-1">
+                <Label className="text-xs">체크리스트</Label>
+                <div className="space-y-1">
+                  {checklistItems.map((item: string, idx: number) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <input type="checkbox" className="w-3.5 h-3.5" />
+                      <span className="text-xs flex-1">{item}</span>
+                      <button className="text-xs text-muted-foreground hover:text-destructive" onClick={() => {
+                        const next = checklistItems.filter((_: string, i: number) => i !== idx);
+                        onUpdateTask({ checklist: JSON.stringify(next) });
+                      }}><X className="w-3 h-3" /></button>
+                    </div>
+                  ))}
+                </div>
+                <form onSubmit={(e) => {
+                  e.preventDefault(); const fd = new FormData(e.currentTarget);
+                  const item = (fd.get("item") as string)?.trim();
+                  if (!item) return;
+                  const next = [...checklistItems, item];
+                  onUpdateTask({ checklist: JSON.stringify(next) });
+                  e.currentTarget.reset();
+                }} className="flex gap-1">
+                  <Input name="item" placeholder="항목 추가..." className="h-7 text-xs" />
+                  <Button type="submit" size="sm" className="h-7 text-xs px-2">추가</Button>
+                </form>
+              </div>
+
+              {/* 사진 */}
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs">사진 ({taskPhotos.length})</Label>
+                  <label className="text-xs text-primary cursor-pointer hover:underline">
+                    {uploading ? "업로드 중..." : "사진 추가"}
+                    <input type="file" accept="image/*" multiple className="hidden" onChange={handlePhotoUpload} disabled={uploading} />
+                  </label>
+                </div>
+                {taskPhotos.length > 0 && (
+                  <div className="grid grid-cols-4 gap-1">
+                    {taskPhotos.slice(0, 8).map((ph) => (
+                      <div key={ph.id} className="aspect-square rounded overflow-hidden border">
+                        <img src={ph.imageUrl} alt="" className="w-full h-full object-cover" />
+                      </div>
+                    ))}
+                    {taskPhotos.length > 8 && <div className="aspect-square rounded border flex items-center justify-center text-xs text-muted-foreground">+{taskPhotos.length - 8}</div>}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -868,7 +966,7 @@ function SortableTaskItem({ task, isExpanded, onToggle, progress, onProgressChan
 }
 
 // ─── Construction Tab ────────────────────────────────────────
-function ConstructionTab({ projectId }: { projectId: string }) {
+function ConstructionTab({ projectId, project }: { projectId: string; project: Project }) {
   const { toast } = useToast();
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
@@ -885,6 +983,8 @@ function ConstructionTab({ projectId }: { projectId: string }) {
   const { data: inspections } = useQuery<Inspection[]>({ queryKey: [`/api/projects/${projectId}/inspections`] });
   const { data: defects } = useQuery<Defect[]>({ queryKey: [`/api/projects/${projectId}/defects`] });
   const { data: designChecks } = useQuery<DesignCheck[]>({ queryKey: [`/api/projects/${projectId}/design-checks`] });
+  const { data: allPhotos } = useQuery<Photo[]>({ queryKey: [`/api/projects/${projectId}/photos`] });
+  const constructionPhotos = allPhotos?.filter((ph) => ph.phase === "CONSTRUCTION") ?? [];
 
   const getProgress = (task: ConstructionTask) => localProgress[task.id] ?? task.progress;
   const avgProgress = tasks?.length ? Math.round(tasks.reduce((sum, t) => sum + getProgress(t), 0) / tasks.length) : 0;
@@ -967,13 +1067,63 @@ function ConstructionTab({ projectId }: { projectId: string }) {
   const pendingDesignChecks = designChecks?.filter((c) => c.isCompleted === 0) ?? [];
   const allChecks = designChecks ?? [];
 
-  // Bulk add handler
+  // Floor info from project
+  const p = project as any;
+  const basementFloors = p.basementFloors ?? 0;
+  const aboveFloors = p.aboveFloors ?? 0;
+  const floorLabels: string[] = [];
+  for (let i = basementFloors; i >= 1; i--) floorLabels.push(`지하${i}층`);
+  for (let i = 1; i <= aboveFloors; i++) floorLabels.push(`${i}층`);
+  if (aboveFloors > 0) floorLabels.push("옥상");
+
+  // Bulk add handler - generates proper task names
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set());
   const handleBulkAdd = () => {
-    const tasksData = Array.from(bulkSelected).map((cat, i) => ({
-      title: cat, category: cat, status: "NOT_STARTED", progress: 0,
-      sortOrder: (tasks?.length ?? 0) + i + 1,
-    }));
+    const tasksData: any[] = [];
+    let order = tasks?.length ?? 0;
+    const cats = Array.from(bulkSelected);
+    // Sort to match CONSTRUCTION_CATEGORIES order
+    const catOrder = CONSTRUCTION_CATEGORIES.map((c) => c.value);
+    cats.sort((a, b) => catOrder.indexOf(a) - catOrder.indexOf(b));
+
+    for (const cat of cats) {
+      // 골조 관련은 층별로 생성
+      if (cat === "철근콘크리트공사" && floorLabels.length > 0) {
+        for (const floor of floorLabels) {
+          order++;
+          tasksData.push({ title: `${cat} - ${floor}`, category: cat, status: "NOT_STARTED", progress: 0, sortOrder: order });
+        }
+      } else {
+        order++;
+        // 공정명을 카테고리와 다르게 구체적으로 생성
+        const titleMap: Record<string, string> = {
+          "가설공사": "가설 울타리 및 임시시설",
+          "토공사": "터파기 및 되메우기",
+          "기초공사": "기초 콘크리트 타설",
+          "철골공사": "철골 구조물 설치",
+          "조적공사": "벽체 조적",
+          "방수공사": "방수층 시공",
+          "석공사": "석재 마감",
+          "타일공사": "타일 시공",
+          "목공사": "목재 시공",
+          "금속공사": "금속 시공",
+          "창호공사": "창호 설치",
+          "도장공사": "도장 마감",
+          "수장공사": "도배 및 바닥재 시공",
+          "단열공사": "단열재 시공",
+          "지붕공사": "지붕 마감",
+          "전기공사": "전기 배선 및 설비",
+          "설비공사": "급배수/난방 배관",
+          "소방공사": "소방 설비 설치",
+          "통신공사": "통신 배선",
+          "승강기공사": "승강기 설치",
+          "조경공사": "조경 식재",
+          "외부마감": "외부 마감재 시공",
+          "준공청소": "최종 청소 및 정리",
+        };
+        tasksData.push({ title: titleMap[cat] || cat, category: cat, status: "NOT_STARTED", progress: 0, sortOrder: order });
+      }
+    }
     bulkTaskMutation.mutate(tasksData);
   };
 
@@ -1121,6 +1271,9 @@ function ConstructionTab({ projectId }: { projectId: string }) {
                       onStatusChange={(s) => updateTaskMutation.mutate({ id: task.id, data: { status: s } })}
                       onEdit={() => setEditTask(task)}
                       onDelete={() => { if (confirm("이 공정을 삭제하시겠습니까?")) deleteTaskMutation.mutate(task.id); }}
+                      onUpdateTask={(data) => updateTaskMutation.mutate({ id: task.id, data })}
+                      photos={constructionPhotos}
+                      projectId={projectId}
                     />
                   ))}
                 </div>
@@ -1519,7 +1672,7 @@ function FilesTab({ projectId, currentPhase }: { projectId: string; currentPhase
 }
 
 // ─── Photos Tab (페이즈별 폴더트리) ─────────────────────────
-function PhotosTab({ projectId, currentPhase }: { projectId: string; currentPhase: string }) {
+function PhotosTab({ projectId, currentPhase, project }: { projectId: string; currentPhase: string; project: Project }) {
   const { toast } = useToast();
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [urlDialogOpen, setUrlDialogOpen] = useState(false);
@@ -1662,6 +1815,28 @@ function PhotosTab({ projectId, currentPhase }: { projectId: string; currentPhas
 
   const phases = ["DESIGN", "PERMIT", "CONSTRUCTION", "COMPLETION", "PORTFOLIO"];
 
+  // Dynamic sub-categories based on floor count
+  const pp = project as any;
+  const bf = pp.basementFloors ?? 0;
+  const af = pp.aboveFloors ?? 0;
+  const floorSubs: string[] = [];
+  for (let i = bf; i >= 1; i--) floorSubs.push(`골조공사-지하${i}층`);
+  for (let i = 1; i <= af; i++) floorSubs.push(`골조공사-${i}층`);
+  if (af > 0) floorSubs.push("골조공사-옥상");
+
+  const dynamicConstructionSubs = [
+    "가설공사", "토공사", "기초공사",
+    ...(floorSubs.length > 0 ? floorSubs : ["골조공사"]),
+    "방수공사", "전기공사", "설비공사", "창호공사",
+    "외부마감", "내부마감", "타일공사", "도장공사",
+    "목공사", "조경공사", "전경", "기타",
+  ];
+
+  const getSubCategories = (phase: string) => {
+    if (phase === "CONSTRUCTION") return dynamicConstructionSubs;
+    return PHOTO_SUB_CATEGORIES[phase] || [];
+  };
+
   const photosByPhase: Record<string, Record<string, Photo[]>> = {};
   phases.forEach((phase) => {
     const phasePhotos = photos?.filter((p) => p.phase === phase) ?? [];
@@ -1709,7 +1884,7 @@ function PhotosTab({ projectId, currentPhase }: { projectId: string; currentPhas
                     <div className="space-y-2"><Label>세부 단계</Label>
                       <select id="paste-sub" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
                         <option value="">선택...</option>
-                        {(PHOTO_SUB_CATEGORIES[uploadPhase] || []).map((s) => <option key={s} value={s}>{s}</option>)}
+                        {getSubCategories(uploadPhase).map((s) => <option key={s} value={s}>{s}</option>)}
                       </select>
                     </div>
                   </div>
@@ -1737,7 +1912,7 @@ function PhotosTab({ projectId, currentPhase }: { projectId: string; currentPhas
                     <div className="space-y-2"><Label>세부 단계</Label>
                       <select name="subCategory" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
                         <option value="">선택...</option>
-                        {(PHOTO_SUB_CATEGORIES[uploadPhase] || []).map((s) => <option key={s} value={s}>{s}</option>)}
+                        {getSubCategories(uploadPhase).map((s) => <option key={s} value={s}>{s}</option>)}
                       </select>
                     </div>
                   </div>
@@ -1771,7 +1946,7 @@ function PhotosTab({ projectId, currentPhase }: { projectId: string; currentPhas
                   <div className="space-y-2"><Label>세부 단계</Label>
                     <select name="subCategory" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
                       <option value="">선택...</option>
-                      {(PHOTO_SUB_CATEGORIES[currentPhase] || []).map((s) => <option key={s} value={s}>{s}</option>)}
+                      {getSubCategories(currentPhase).map((s) => <option key={s} value={s}>{s}</option>)}
                     </select>
                   </div>
                 </div>
@@ -1904,7 +2079,7 @@ function PhotosTab({ projectId, currentPhase }: { projectId: string; currentPhas
                 <div className="space-y-2"><Label>세부 단계</Label>
                   <select name="subCategory" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" defaultValue={(editPhoto as any).subCategory || ""}>
                     <option value="">선택...</option>
-                    {(PHOTO_SUB_CATEGORIES[editPhoto.phase] || []).map((s) => <option key={s} value={s}>{s}</option>)}
+                    {getSubCategories(editPhoto.phase).map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
               </div>
@@ -1978,10 +2153,10 @@ export default function ProjectDetail() {
           </TabsList>
           <TabsContent value="overview"><OverviewTab project={project} /></TabsContent>
           <TabsContent value="design"><DesignTab projectId={project.id} /></TabsContent>
-          <TabsContent value="construction"><ConstructionTab projectId={project.id} /></TabsContent>
+          <TabsContent value="construction"><ConstructionTab projectId={project.id} project={project} /></TabsContent>
           <TabsContent value="schedule"><ScheduleTab projectId={project.id} currentPhase={project.currentPhase} /></TabsContent>
           <TabsContent value="files"><FilesTab projectId={project.id} currentPhase={project.currentPhase} /></TabsContent>
-          <TabsContent value="photos"><PhotosTab projectId={project.id} currentPhase={project.currentPhase} /></TabsContent>
+          <TabsContent value="photos"><PhotosTab projectId={project.id} currentPhase={project.currentPhase} project={project} /></TabsContent>
         </Tabs>
       </div>
     </AppLayout>
