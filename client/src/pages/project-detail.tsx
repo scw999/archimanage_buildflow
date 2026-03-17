@@ -21,8 +21,11 @@ import {
   Cloud, Users, CheckCircle2, ClipboardList,
   HardHat, AlertTriangle, Search, MessageSquare,
   FolderTree, ChevronDown, ChevronRight, Building2, Ruler, Layers, Trash2,
-  ArrowUp, ArrowDown, Pencil
+  GripVertical, Pencil
 } from "lucide-react";
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import type {
   Project, Schedule, DailyLog, File as ProjectFile, Photo,
   DesignChange, DesignCheck, ConstructionTask, Inspection, Defect,
@@ -803,6 +806,67 @@ function RequestsSection({ projectId, phase }: { projectId: string; phase: strin
   );
 }
 
+// ─── Sortable Task Item ──────────────────────────────────────
+function SortableTaskItem({ task, isExpanded, onToggle, progress, onProgressChange, onProgressCommit, onStatusChange, onEdit, onDelete }: {
+  task: ConstructionTask; isExpanded: boolean; onToggle: () => void;
+  progress: number; onProgressChange: (v: number) => void; onProgressCommit: (v: number) => void;
+  onStatusChange: (s: string) => void; onEdit: () => void; onDelete: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
+  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
+
+  return (
+    <div ref={setNodeRef} style={style} className="p-3 rounded-lg border bg-background">
+      <div className="flex items-start gap-2">
+        <button {...attributes} {...listeners} className="mt-1 cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground touch-none">
+          <GripVertical className="w-4 h-4" />
+        </button>
+        <div className="flex-1 min-w-0">
+          <div className="cursor-pointer" onClick={onToggle}>
+            <div className="flex items-center gap-2 flex-wrap mb-2">
+              <span className="text-sm font-medium">{task.title}</span>
+              <Badge variant="outline" className="text-xs">{task.category}</Badge>
+              <Badge variant="outline" className={getTaskStatusColor(task.status)}>{getTaskStatusLabel(task.status)}</Badge>
+              {task.assignee && <span className="text-xs text-muted-foreground">{task.assignee}</span>}
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="flex-1 bg-muted rounded-full h-2">
+                <div className={`h-2 rounded-full transition-all ${task.status === "DELAYED" ? "bg-red-500" : "bg-primary"}`} style={{ width: `${progress}%` }} />
+              </div>
+              <span className="text-xs font-medium w-10 text-right">{progress}%</span>
+            </div>
+            {(task.startDate || task.endDate) && <p className="text-xs text-muted-foreground mt-1">{task.startDate} ~ {task.endDate}</p>}
+          </div>
+          {isExpanded && (
+            <div className="mt-3 pt-3 border-t space-y-3">
+              <div className="space-y-1">
+                <Label className="text-xs">진행률: {progress}%</Label>
+                <input type="range" min="0" max="100" value={progress}
+                  onChange={(e) => onProgressChange(parseInt(e.target.value))}
+                  onMouseUp={(e) => onProgressCommit(parseInt((e.target as HTMLInputElement).value))}
+                  onTouchEnd={(e) => onProgressCommit(parseInt((e.target as HTMLInputElement).value))}
+                  className="w-full" />
+              </div>
+              <div className="flex items-center gap-2">
+                <Label className="text-xs">상태:</Label>
+                <select value={task.status} onChange={(e) => onStatusChange(e.target.value)}
+                  className="rounded-md border border-input bg-background px-2 py-1 text-xs">
+                  <option value="NOT_STARTED">미착수</option><option value="IN_PROGRESS">진행중</option>
+                  <option value="COMPLETED">완료</option><option value="DELAYED">지연</option>
+                </select>
+                <Button variant="outline" size="icon" className="h-7 w-7 ml-auto" onClick={onEdit}>
+                  <Pencil className="w-3 h-3" /></Button>
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={onDelete}>
+                  <Trash2 className="w-4 h-4" /></Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Construction Tab ────────────────────────────────────────
 function ConstructionTab({ projectId }: { projectId: string }) {
   const { toast } = useToast();
@@ -856,15 +920,15 @@ function ConstructionTab({ projectId }: { projectId: string }) {
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/construction-tasks`] }); },
   });
 
-  const moveTask = (taskId: string, direction: "up" | "down") => {
-    const sorted = [...sortedTasks];
-    const idx = sorted.findIndex((t) => t.id === taskId);
-    if (direction === "up" && idx > 0) {
-      [sorted[idx], sorted[idx - 1]] = [sorted[idx - 1], sorted[idx]];
-    } else if (direction === "down" && idx < sorted.length - 1) {
-      [sorted[idx], sorted[idx + 1]] = [sorted[idx + 1], sorted[idx]];
-    } else return;
-    reorderMutation.mutate(sorted.map((t) => t.id));
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIdx = sortedTasks.findIndex((t) => t.id === active.id);
+    const newIdx = sortedTasks.findIndex((t) => t.id === over.id);
+    const reordered = arrayMove(sortedTasks, oldIdx, newIdx);
+    reorderMutation.mutate(reordered.map((t) => t.id));
   };
 
   const checkMutation = useMutation({
@@ -1044,68 +1108,24 @@ function ConstructionTab({ projectId }: { projectId: string }) {
           {!sortedTasks.length ? (
             <p className="text-sm text-muted-foreground text-center py-4">등록된 공정이 없습니다</p>
           ) : (
-            <div className="space-y-3">
-              {sortedTasks.map((task) => (
-                <div key={task.id} className="p-3 rounded-lg border">
-                  <div className="cursor-pointer" onClick={() => setExpandedTask(expandedTask === task.id ? null : task.id)}>
-                    <div className="flex items-center gap-2 flex-wrap mb-2">
-                      <span className="text-sm font-medium">{task.title}</span>
-                      <Badge variant="outline" className="text-xs">{task.category}</Badge>
-                      <Badge variant="outline" className={getTaskStatusColor(task.status)}>{getTaskStatusLabel(task.status)}</Badge>
-                      {task.assignee && <span className="text-xs text-muted-foreground">{task.assignee}</span>}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 bg-muted rounded-full h-2">
-                        <div className={`h-2 rounded-full transition-all ${task.status === "DELAYED" ? "bg-red-500" : "bg-primary"}`} style={{ width: `${getProgress(task)}%` }} />
-                      </div>
-                      <span className="text-xs font-medium w-10 text-right">{getProgress(task)}%</span>
-                    </div>
-                    {(task.startDate || task.endDate) && <p className="text-xs text-muted-foreground mt-1">{task.startDate} ~ {task.endDate}</p>}
-                  </div>
-                  {expandedTask === task.id && (
-                    <div className="mt-3 pt-3 border-t space-y-3">
-                      <div className="space-y-1">
-                        <Label className="text-xs">진행률: {getProgress(task)}%</Label>
-                        <input type="range" min="0" max="100" value={getProgress(task)}
-                          onChange={(e) => {
-                            const v = parseInt(e.target.value);
-                            setLocalProgress((prev) => ({ ...prev, [task.id]: v }));
-                          }}
-                          onMouseUp={(e) => {
-                            const v = parseInt((e.target as HTMLInputElement).value);
-                            updateTaskMutation.mutate({ id: task.id, data: { progress: v } });
-                          }}
-                          onTouchEnd={(e) => {
-                            const v = parseInt((e.target as HTMLInputElement).value);
-                            updateTaskMutation.mutate({ id: task.id, data: { progress: v } });
-                          }}
-                          className="w-full" />
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Label className="text-xs">상태:</Label>
-                        <select value={task.status} onChange={(e) => updateTaskMutation.mutate({ id: task.id, data: { status: e.target.value } })}
-                          className="rounded-md border border-input bg-background px-2 py-1 text-xs">
-                          <option value="NOT_STARTED">미착수</option><option value="IN_PROGRESS">진행중</option>
-                          <option value="COMPLETED">완료</option><option value="DELAYED">지연</option>
-                        </select>
-                      </div>
-                      <div className="flex items-center gap-1 pt-1">
-                        <span className="text-xs text-muted-foreground mr-1">순서:</span>
-                        <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => moveTask(task.id, "up")}
-                          disabled={sortedTasks[0]?.id === task.id}><ArrowUp className="w-3 h-3" /></Button>
-                        <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => moveTask(task.id, "down")}
-                          disabled={sortedTasks[sortedTasks.length - 1]?.id === task.id}><ArrowDown className="w-3 h-3" /></Button>
-                        <Button variant="outline" size="icon" className="h-7 w-7 ml-2" onClick={() => setEditTask(task)}>
-                          <Pencil className="w-3 h-3" /></Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 ml-auto text-destructive hover:text-destructive"
-                          onClick={() => { if (confirm("이 공정을 삭제하시겠습니까?")) deleteTaskMutation.mutate(task.id); }}>
-                          <Trash2 className="w-4 h-4" /></Button>
-                      </div>
-                    </div>
-                  )}
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              <SortableContext items={sortedTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+                <div className="space-y-3">
+                  {sortedTasks.map((task) => (
+                    <SortableTaskItem key={task.id} task={task}
+                      isExpanded={expandedTask === task.id}
+                      onToggle={() => setExpandedTask(expandedTask === task.id ? null : task.id)}
+                      progress={getProgress(task)}
+                      onProgressChange={(v) => setLocalProgress((prev) => ({ ...prev, [task.id]: v }))}
+                      onProgressCommit={(v) => updateTaskMutation.mutate({ id: task.id, data: { progress: v } })}
+                      onStatusChange={(s) => updateTaskMutation.mutate({ id: task.id, data: { status: s } })}
+                      onEdit={() => setEditTask(task)}
+                      onDelete={() => { if (confirm("이 공정을 삭제하시겠습니까?")) deleteTaskMutation.mutate(task.id); }}
+                    />
+                  ))}
                 </div>
-              ))}
-            </div>
+              </SortableContext>
+            </DndContext>
           )}
         </CardContent>
       </Card>
