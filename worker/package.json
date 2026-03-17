@@ -1,6 +1,7 @@
 {
   "name": "buildflow-worker",
   "version": "1.0.0",
+  "description": "Cloudflare Worker API for BuildWorking / BuildFlow",
   "private": true,
   "scripts": {
     "dev": "wrangler dev",

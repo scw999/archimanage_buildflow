@@ -1,6 +1,7 @@
 {
   "name": "rest-express",
   "version": "1.0.0",
+  "description": "BuildWorking / BuildFlow architectural project management application",
   "type": "module",
   "license": "MIT",
   "scripts": {
