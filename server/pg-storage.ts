@@ -137,9 +137,24 @@ export class PgStorage implements IStorage {
     return db.select().from(photos).where(eq(photos.projectId, projectId));
   }
 
+  async getPhoto(id: string): Promise<Photo | undefined> {
+    const [row] = await db.select().from(photos).where(eq(photos.id, id));
+    return row;
+  }
+
   async createPhoto(data: InsertPhoto): Promise<Photo> {
     const [row] = await db.insert(photos).values(data).returning();
     return row;
+  }
+
+  async updatePhoto(id: string, data: Partial<InsertPhoto>): Promise<Photo | undefined> {
+    const [row] = await db.update(photos).set(data).where(eq(photos.id, id)).returning();
+    return row;
+  }
+
+  async deletePhoto(id: string): Promise<boolean> {
+    const result = await db.delete(photos).where(eq(photos.id, id)).returning();
+    return result.length > 0;
   }
 
   // ClientRequests

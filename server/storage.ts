@@ -53,7 +53,10 @@ export interface IStorage {
 
   // Photos
   getPhotosByProject(projectId: string): Promise<Photo[]>;
+  getPhoto(id: string): Promise<Photo | undefined>;
   createPhoto(photo: InsertPhoto): Promise<Photo>;
+  updatePhoto(id: string, data: Partial<InsertPhoto>): Promise<Photo | undefined>;
+  deletePhoto(id: string): Promise<boolean>;
 
   // ClientRequests
   getRequestsByProject(projectId: string): Promise<ClientRequest[]>;
@@ -500,11 +503,27 @@ export class MemStorage implements IStorage {
     return Array.from(this.photos.values()).filter((p) => p.projectId === projectId);
   }
 
+  async getPhoto(id: string): Promise<Photo | undefined> {
+    return this.photos.get(id);
+  }
+
   async createPhoto(insertPhoto: InsertPhoto): Promise<Photo> {
     const id = randomUUID();
     const photo: Photo = { id, thumbnailUrl: null, description: null, tags: null, takenAt: null, subCategory: null, createdBy: null, ...insertPhoto };
     this.photos.set(id, photo);
     return photo;
+  }
+
+  async updatePhoto(id: string, data: Partial<InsertPhoto>): Promise<Photo | undefined> {
+    const photo = this.photos.get(id);
+    if (!photo) return undefined;
+    const updated = { ...photo, ...data };
+    this.photos.set(id, updated);
+    return updated;
+  }
+
+  async deletePhoto(id: string): Promise<boolean> {
+    return this.photos.delete(id);
   }
 
   // ClientRequests

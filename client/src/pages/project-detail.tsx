@@ -1581,9 +1581,21 @@ function PhotosTab({ projectId, currentPhase }: { projectId: string; currentPhas
     }
   };
 
+  const [editPhoto, setEditPhoto] = useState<Photo | null>(null);
+
   const urlMutation = useMutation({
     mutationFn: async (data: any) => { await apiRequest("POST", `/api/projects/${projectId}/photos`, data); },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/photos`] }); toast({ title: "사진이 추가되었습니다" }); setUrlDialogOpen(false); },
+  });
+
+  const updatePhotoMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: any }) => { await apiRequest("PATCH", `/api/photos/${id}`, data); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/photos`] }); toast({ title: "사진이 수정되었습니다" }); setEditPhoto(null); },
+  });
+
+  const deletePhotoMutation = useMutation({
+    mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/photos/${id}`); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/photos`] }); toast({ title: "사진이 삭제되었습니다" }); setLightbox(null); },
   });
 
   // File upload handler
@@ -1836,16 +1848,76 @@ function PhotosTab({ projectId, currentPhase }: { projectId: string; currentPhas
       {lightbox && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => setLightbox(null)}>
           <div className="relative max-w-4xl max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
-            <Button variant="ghost" size="icon" className="absolute -top-10 right-0 text-white hover:text-white/80" onClick={() => setLightbox(null)}>
-              <X className="w-6 h-6" />
-            </Button>
+            <div className="absolute -top-10 right-0 flex items-center gap-1">
+              <Button variant="ghost" size="icon" className="text-white hover:text-white/80"
+                onClick={() => { setEditPhoto(lightbox); setLightbox(null); }}>
+                <Pencil className="w-5 h-5" />
+              </Button>
+              <Button variant="ghost" size="icon" className="text-red-400 hover:text-red-300"
+                onClick={() => { if (confirm("이 사진을 삭제하시겠습니까?")) deletePhotoMutation.mutate(lightbox.id); }}>
+                <Trash2 className="w-5 h-5" />
+              </Button>
+              <Button variant="ghost" size="icon" className="text-white hover:text-white/80" onClick={() => setLightbox(null)}>
+                <X className="w-6 h-6" />
+              </Button>
+            </div>
             <img src={lightbox.imageUrl} alt={lightbox.description || ""} className="max-w-full max-h-[80vh] object-contain rounded-lg" />
             <div className="text-white text-sm text-center mt-3">
               {lightbox.takenAt && <span>{lightbox.takenAt}</span>}
               {lightbox.description && <span> - {lightbox.description}</span>}
+              {(lightbox as any).subCategory && <span className="ml-2 text-white/60">[{(lightbox as any).subCategory}]</span>}
             </div>
           </div>
         </div>
+      )}
+
+      {/* 사진 수정 다이얼로그 */}
+      {editPhoto && (
+        <Dialog open onOpenChange={() => setEditPhoto(null)}>
+          <DialogContent>
+            <DialogHeader><DialogTitle>사진 정보 수정</DialogTitle></DialogHeader>
+            <div className="mb-3 border rounded-lg overflow-hidden max-h-32 flex items-center justify-center bg-muted">
+              <img src={editPhoto.imageUrl} alt="" className="max-h-32 object-contain" />
+            </div>
+            <form onSubmit={(e) => {
+              e.preventDefault(); const fd = new FormData(e.currentTarget);
+              updatePhotoMutation.mutate({
+                id: editPhoto.id,
+                data: {
+                  description: fd.get("description") || null,
+                  tags: fd.get("tags") || null,
+                  takenAt: fd.get("takenAt") || null,
+                  phase: fd.get("phase"),
+                  subCategory: fd.get("subCategory") || null,
+                },
+              });
+            }} className="space-y-4">
+              <div className="space-y-2"><Label>설명</Label><Input name="description" defaultValue={editPhoto.description || ""} /></div>
+              <div className="space-y-2"><Label>태그 (쉼표 구분)</Label><Input name="tags" defaultValue={editPhoto.tags || ""} /></div>
+              <div className="space-y-2"><Label>촬영일</Label><DateInput name="takenAt" defaultValue={editPhoto.takenAt || ""} /></div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2"><Label>페이즈</Label>
+                  <select name="phase" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" defaultValue={editPhoto.phase}>
+                    {phases.map((p) => <option key={p} value={p}>{getPhaseLabel(p)}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-2"><Label>세부 단계</Label>
+                  <select name="subCategory" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" defaultValue={(editPhoto as any).subCategory || ""}>
+                    <option value="">선택...</option>
+                    {(PHOTO_SUB_CATEGORIES[editPhoto.phase] || []).map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button type="submit" disabled={updatePhotoMutation.isPending} className="flex-1">저장</Button>
+                <Button type="button" variant="destructive"
+                  onClick={() => { if (confirm("이 사진을 삭제하시겠습니까?")) { deletePhotoMutation.mutate(editPhoto.id); setEditPhoto(null); } }}>
+                  삭제
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );

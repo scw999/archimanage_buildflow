@@ -207,6 +207,18 @@ export async function registerRoutes(
     return res.json(photo);
   });
 
+  app.patch("/api/photos/:id", authMiddleware, async (req: Request, res: Response) => {
+    const photo = await storage.updatePhoto(req.params.id, req.body);
+    if (!photo) return res.status(404).json({ message: "사진을 찾을 수 없습니다" });
+    return res.json(photo);
+  });
+
+  app.delete("/api/photos/:id", authMiddleware, async (req: Request, res: Response) => {
+    const success = await storage.deletePhoto(req.params.id);
+    if (!success) return res.status(404).json({ message: "사진을 찾을 수 없습니다" });
+    return res.json({ ok: true });
+  });
+
   // Photo file upload (R2 or local)
   app.post("/api/projects/:id/photos/upload", authMiddleware, upload.array("photos", 20), async (req: Request, res: Response) => {
     const userId = (req as any).userId;
