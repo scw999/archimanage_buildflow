@@ -15,8 +15,64 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Calendar, Camera, FileText, MapPin, User, ExternalLink, X, ClipboardList, HardHat, MessageSquare, Plus, ChevronDown, ChevronRight, FolderTree } from "lucide-react";
+import { Calendar, Camera, FileText, MapPin, User, ExternalLink, Download, X, ClipboardList, HardHat, MessageSquare, Plus, ChevronDown, ChevronRight, FolderTree } from "lucide-react";
 import type { Project, Schedule, Photo, File as ProjectFile, ConstructionTask, ClientRequest, Comment } from "@shared/schema";
+
+function isImageLikeUrl(url: string) {
+  return /\.(png|jpe?g|gif|webp|bmp|svg)(\?.*)?$/i.test(url) || url.includes("/api/photos/file/") || url.includes("/uploads/photos/");
+}
+
+function extractGoogleDriveFileId(url: string) {
+  const patterns = [/\/file\/d\/([^/]+)/, /[?&]id=([^&]+)/];
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match?.[1]) return match[1];
+  }
+  return null;
+}
+
+function getDownloadableUrl(url: string) {
+  const driveId = extractGoogleDriveFileId(url);
+  if (driveId) return `https://drive.google.com/uc?export=download&id=${driveId}`;
+  return url;
+}
+
+function AttachmentPreviewGrid({ attachments }: { attachments: string[] }) {
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+
+  if (!attachments.length) return null;
+
+  return (
+    <>
+      <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
+        {attachments.map((url, i) => {
+          const isImage = isImageLikeUrl(url);
+          return isImage ? (
+            <button key={`${url}-${i}`} type="button" className="aspect-square rounded overflow-hidden border hover:opacity-90 transition-opacity" onClick={() => setLightboxUrl(url)}>
+              <img src={url} alt="attachment" className="w-full h-full object-cover" />
+            </button>
+          ) : (
+            <a key={`${url}-${i}`} href={getDownloadableUrl(url)} download target="_blank" rel="noopener noreferrer" className="aspect-square rounded border p-3 flex flex-col items-center justify-center gap-2 hover:bg-muted/40 transition-colors">
+              <FileText className="w-6 h-6 text-muted-foreground" />
+              <span className="text-[11px] text-center text-muted-foreground line-clamp-3 break-all">파일 다운로드</span>
+            </a>
+          );
+        })}
+      </div>
+
+      {lightboxUrl && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => setLightboxUrl(null)}>
+          <div className="relative max-w-5xl max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
+            <Button variant="ghost" size="icon" className="absolute -top-10 right-0 text-white hover:text-white/80" onClick={() => setLightboxUrl(null)}>
+              <X className="w-6 h-6" />
+            </Button>
+            <img src={lightboxUrl} alt="attachment preview" className="max-w-full max-h-[85vh] object-contain rounded-lg" />
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
 
 function getCategoryLabel(cat: string) {
   const map: Record<string, string> = {
@@ -286,11 +342,18 @@ function ClientFilesView({ projectId }: { projectId: string }) {
                   <span className="text-sm font-medium">{f.title}</span>
                   <Badge variant="outline" className="ml-2 text-xs">{getCategoryLabel(f.category)}</Badge>
                 </div>
-                <a href={f.url} target="_blank" rel="noopener noreferrer">
-                  <Button variant="ghost" size="icon" className="h-8 w-8" data-testid={`client-file-link-${f.id}`}>
-                    <ExternalLink className="w-4 h-4" />
-                  </Button>
-                </a>
+                <div className="flex items-center gap-1">
+                  <a href={f.url} target="_blank" rel="noopener noreferrer">
+                    <Button variant="ghost" size="icon" className="h-8 w-8" data-testid={`client-file-link-${f.id}`}>
+                      <ExternalLink className="w-4 h-4" />
+                    </Button>
+                  </a>
+                  <a href={getDownloadableUrl(f.url)} download target="_blank" rel="noopener noreferrer">
+                    <Button variant="ghost" size="icon" className="h-8 w-8" data-testid={`client-file-download-${f.id}`}>
+                      <Download className="w-4 h-4" />
+                    </Button>
+                  </a>
+                </div>
               </div>
             ))}
           </div>
@@ -528,15 +591,7 @@ function ClientRequestsView({ projectId }: { projectId: string }) {
                   {expandedReq === req.id && (
                     <div className="mt-3 pt-3 border-t space-y-3 ml-6">
                       <p className="text-sm">{req.content}</p>
-                      {attachments.length > 0 && (
-                        <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
-                          {attachments.map((url, i) => (
-                            <div key={i} className="aspect-square rounded overflow-hidden border">
-                              <img src={url} alt="" className="w-full h-full object-cover" />
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                      {attachments.length > 0 && <AttachmentPreviewGrid attachments={attachments} />}
                       <div className="space-y-2">
                         <p className="text-sm font-semibold">댓글</p>
                         {comments?.map((c) => (

@@ -20,7 +20,7 @@ import { apiRequest, queryClient, getAuthToken } from "@/lib/queryClient";
 const API_BASE = import.meta.env.VITE_API_URL || "";
 import {
   Plus, Calendar, FileText, Camera,
-  MapPin, User, ExternalLink, X,
+  MapPin, User, ExternalLink, Download, X,
   Cloud, Users, CheckCircle2, ClipboardList,
   HardHat, AlertTriangle, Search, MessageSquare,
   FolderTree, ChevronDown, ChevronRight, Building2, Ruler, Layers, Trash2,
@@ -64,6 +64,77 @@ const CONSTRUCTION_CATEGORIES = [
   { value: "준공청소", label: "준공청소" },
   { value: "기타", label: "기타" },
 ];
+
+function isImageLikeUrl(url: string) {
+  return /\.(png|jpe?g|gif|webp|bmp|svg)(\?.*)?$/i.test(url) || url.includes("/api/photos/file/") || url.includes("/uploads/photos/");
+}
+
+function extractGoogleDriveFileId(url: string) {
+  const patterns = [
+    /\/file\/d\/([^/]+)/,
+    /[?&]id=([^&]+)/,
+  ];
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match?.[1]) return match[1];
+  }
+  return null;
+}
+
+function getDownloadableUrl(url: string) {
+  const driveId = extractGoogleDriveFileId(url);
+  if (driveId) return `https://drive.google.com/uc?export=download&id=${driveId}`;
+  return url;
+}
+
+function AttachmentPreviewGrid({ attachments }: { attachments: string[] }) {
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+
+  if (!attachments.length) return null;
+
+  return (
+    <>
+      <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
+        {attachments.map((url, i) => {
+          const isImage = isImageLikeUrl(url);
+          return isImage ? (
+            <button
+              key={`${url}-${i}`}
+              type="button"
+              className="aspect-square rounded overflow-hidden border hover:opacity-90 transition-opacity"
+              onClick={() => setLightboxUrl(url)}
+            >
+              <img src={url} alt="attachment" className="w-full h-full object-cover" />
+            </button>
+          ) : (
+            <a
+              key={`${url}-${i}`}
+              href={getDownloadableUrl(url)}
+              download
+              target="_blank"
+              rel="noopener noreferrer"
+              className="aspect-square rounded border p-3 flex flex-col items-center justify-center gap-2 hover:bg-muted/40 transition-colors"
+            >
+              <FileText className="w-6 h-6 text-muted-foreground" />
+              <span className="text-[11px] text-center text-muted-foreground line-clamp-3 break-all">파일 다운로드</span>
+            </a>
+          );
+        })}
+      </div>
+
+      {lightboxUrl && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => setLightboxUrl(null)}>
+          <div className="relative max-w-5xl max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
+            <Button variant="ghost" size="icon" className="absolute -top-10 right-0 text-white hover:text-white/80" onClick={() => setLightboxUrl(null)}>
+              <X className="w-6 h-6" />
+            </Button>
+            <img src={lightboxUrl} alt="attachment preview" className="max-w-full max-h-[85vh] object-contain rounded-lg" />
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
 
 const SCHEDULE_PRESETS = [
   { title: "건축주 미팅", category: "MEETING" },
@@ -703,12 +774,8 @@ function DesignTab({ projectId }: { projectId: string }) {
                             </div>
                             {item.memo && <p className="text-sm text-muted-foreground mt-1">{item.memo}</p>}
                             {itemAttachments.length > 0 && (
-                              <div className="grid grid-cols-4 gap-1 mt-2">
-                                {itemAttachments.map((url, i) => (
-                                  <div key={i} className="aspect-square rounded overflow-hidden border">
-                                    <img src={url} alt="" className="w-full h-full object-cover" />
-                                  </div>
-                                ))}
+                              <div className="mt-2">
+                                <AttachmentPreviewGrid attachments={itemAttachments} />
                               </div>
                             )}
                             <div className="mt-1">
@@ -997,15 +1064,7 @@ function RequestsSection({ projectId, phase }: { projectId: string; phase: strin
                     <div className="mt-3 pt-3 border-t space-y-3 ml-6">
                       <p className="text-sm">{req.content}</p>
                       {/* 첨부 이미지 */}
-                      {attachments.length > 0 && (
-                        <div className="grid grid-cols-4 gap-1">
-                          {attachments.map((url, i) => (
-                            <div key={i} className="aspect-square rounded overflow-hidden border">
-                              <img src={url} alt="" className="w-full h-full object-cover" />
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                      {attachments.length > 0 && <AttachmentPreviewGrid attachments={attachments} />}
                       <div className="flex items-center gap-2 flex-wrap">
                         {isPM && (
                           <>
@@ -1507,12 +1566,8 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
                         </div>
                         {item.memo && <p className="text-sm text-muted-foreground mt-1">{item.memo}</p>}
                         {cAttachments.length > 0 && (
-                          <div className="grid grid-cols-4 gap-1 mt-2">
-                            {cAttachments.map((url, i) => (
-                              <div key={i} className="aspect-square rounded overflow-hidden border">
-                                <img src={url} alt="" className="w-full h-full object-cover" />
-                              </div>
-                            ))}
+                          <div className="mt-2">
+                            <AttachmentPreviewGrid attachments={cAttachments} />
                           </div>
                         )}
                         <div className="mt-1">
@@ -2018,9 +2073,14 @@ function FilesTab({ projectId, currentPhase }: { projectId: string; currentPhase
                   </div>
                   {f.description && <p className="text-xs text-muted-foreground mt-0.5 truncate">{f.description}</p>}
                 </div>
-                <a href={f.url} target="_blank" rel="noopener noreferrer" className="shrink-0">
-                  <Button variant="ghost" size="icon" className="h-8 w-8"><ExternalLink className="w-4 h-4" /></Button>
-                </a>
+                <div className="shrink-0 flex items-center gap-1">
+                  <a href={f.url} target="_blank" rel="noopener noreferrer">
+                    <Button variant="ghost" size="icon" className="h-8 w-8"><ExternalLink className="w-4 h-4" /></Button>
+                  </a>
+                  <a href={getDownloadableUrl(f.url)} download target="_blank" rel="noopener noreferrer">
+                    <Button variant="ghost" size="icon" className="h-8 w-8"><Download className="w-4 h-4" /></Button>
+                  </a>
+                </div>
               </CardContent>
             </Card>
           ))}
