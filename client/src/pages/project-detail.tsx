@@ -880,6 +880,7 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
   const [selectedChange, setSelectedChange] = useState<DesignChange | null>(null);
   const [showAllFloors, setShowAllFloors] = useState(false);
   const [designLightbox, setDesignLightbox] = useState<string | null>(null);
+  const [editingCheck, setEditingCheck] = useState<DesignCheck | null>(null);
 
   const { data: allDesignChecks } = useQuery<DesignCheck[]>({ queryKey: [`/api/projects/${projectId}/design-checks`] });
   const designChecks = allDesignChecks?.filter((c) => (c as any).phase === "DESIGN" || !(c as any).phase) ?? [];
@@ -1107,6 +1108,9 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
                               <span className={`text-sm font-medium ${item.isCompleted === 1 ? "line-through text-muted-foreground" : ""}`}>{item.title}</span>
                               {(item as any).linkedToConstruction === 1 && <Badge variant="outline" className="text-xs px-1.5">시공연동</Badge>}
                               {itemAttachments.length > 0 && <span className="text-xs text-muted-foreground"><Camera className="w-3 h-3 inline" /> {itemAttachments.length}</span>}
+                              <Button variant="ghost" size="icon" className="h-6 w-6 ml-auto shrink-0" onClick={() => setEditingCheck(item)}>
+                                <Pencil className="w-3 h-3" />
+                              </Button>
                             </div>
                             {item.memo && <p className="text-sm text-muted-foreground mt-1">{item.memo}</p>}
                             {itemAttachments.length > 0 && (
@@ -1229,6 +1233,24 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
           )}
         </CardContent>
       </Card>
+
+      {/* 체크리스트 수정 다이얼로그 */}
+      {editingCheck && (
+        <Dialog open onOpenChange={() => setEditingCheck(null)}>
+          <DialogContent>
+            <DialogHeader><DialogTitle>체크리스트 항목 수정</DialogTitle></DialogHeader>
+            <form onSubmit={(e) => {
+              e.preventDefault(); const fd = new FormData(e.currentTarget);
+              toggleCheckMutation.mutate({ id: editingCheck.id, title: fd.get("title") as string, memo: fd.get("memo") as string || null });
+              setEditingCheck(null);
+            }} className="space-y-4">
+              <div className="space-y-2"><Label>항목명</Label><Input name="title" required defaultValue={editingCheck.title} /></div>
+              <div className="space-y-2"><Label>메모</Label><Textarea name="memo" defaultValue={editingCheck.memo || ""} /></div>
+              <Button type="submit" className="w-full">저장</Button>
+            </form>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* 건축주 요청사항 (설계 단계) */}
       <RequestsSection projectId={projectId} phase="DESIGN" />
@@ -1404,11 +1426,12 @@ function RequestsSection({ projectId, phase }: { projectId: string; phase: strin
                   {expandedReq === req.id && (
                     <div className="mt-3 pt-3 border-t space-y-3 ml-6">
                       <p className="text-sm">{req.content}</p>
-                      {/* 첨부 이미지 + 드래그앤드롭 + 붙여넣기 */}
+                      {/* 첨부 이미지/파일 표시 */}
                       {attachments.length > 0 && <AttachmentPreviewGrid attachments={attachments} />}
+                      {/* 새 파일 업로드 */}
                       <FileDropZone projectId={projectId} phase={phase} subCategory="요청첨부" acceptFiles
-                        existingUrls={attachments}
-                        onUploaded={(urls) => updateRequestMutation.mutate({ id: req.id, data: { attachments: JSON.stringify(urls) } })} />
+                        existingUrls={[]}
+                        onUploaded={(urls) => updateRequestMutation.mutate({ id: req.id, data: { attachments: JSON.stringify([...attachments, ...urls]) } })} />
                       <div className="flex items-center gap-2 flex-wrap">
                         {isPM && (
                           <>
@@ -1544,13 +1567,22 @@ function SortableTaskItem({ task, isExpanded, onToggle, progress, onProgressChan
           </button>
         )}
         <div className="flex-1 min-w-0">
-          <div className="cursor-pointer" onClick={onToggle}>
+          <div>
             <div className="flex items-center gap-2 flex-wrap mb-2">
               <span className="text-sm font-medium">{task.title}</span>
               <Badge variant="outline" className="text-xs">{task.category}</Badge>
               <Badge variant="outline" className={getTaskStatusColor(task.status)}>{getTaskStatusLabel(task.status)}</Badge>
               {task.assignee && <span className="text-xs text-muted-foreground">{task.assignee}</span>}
               {taskPhotos.length > 0 && <span className="text-xs text-muted-foreground"><Camera className="w-3 h-3 inline" /> {taskPhotos.length}</span>}
+              <div className="ml-auto flex items-center gap-1 shrink-0">
+                <Button variant="outline" size="sm" className="h-6 text-xs px-2" onClick={onToggle}>
+                  {isExpanded ? <ChevronDown className="w-3 h-3 mr-1" /> : <ChevronRight className="w-3 h-3 mr-1" />}
+                  {isExpanded ? "접기" : "상세"}
+                </Button>
+                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onEdit}>
+                  <Pencil className="w-3 h-3" />
+                </Button>
+              </div>
             </div>
             <div className="flex items-center gap-2">
               <div className="flex-1 bg-muted rounded-full h-2">
@@ -1588,10 +1620,8 @@ function SortableTaskItem({ task, isExpanded, onToggle, progress, onProgressChan
                   <option value="NOT_STARTED">미착수</option><option value="IN_PROGRESS">진행중</option>
                   <option value="COMPLETED">완료</option><option value="DELAYED">지연</option>
                 </select>
-                <Button variant="outline" size="icon" className="h-7 w-7 ml-auto" onClick={onEdit}>
-                  <Pencil className="w-3 h-3" /></Button>
-                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={onDelete}>
-                  <Trash2 className="w-4 h-4" /></Button>
+                <Button variant="ghost" size="sm" className="h-7 ml-auto text-xs text-destructive hover:text-destructive" onClick={onDelete}>
+                  <Trash2 className="w-3 h-3 mr-1" />삭제</Button>
               </div>
 
               {/* 메모 */}
@@ -1988,16 +2018,27 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
                 <form onSubmit={(e) => {
                   e.preventDefault(); const fd = new FormData(e.currentTarget);
                   const category = fd.get("category") as string;
-                  // Calculate sort order based on category priority
-                  const catPriority = CONSTRUCTION_CATEGORY_PRIORITY[category] ?? 500;
+                  // Calculate sort order: insert after the last task with the same category
                   const existing = sortedTasks;
-                  // Find the right position: before the first task with equal or higher priority
                   let insertOrder = (tasks?.length ?? 0) + 1;
-                  for (let i = 0; i < existing.length; i++) {
-                    const existingPriority = CONSTRUCTION_CATEGORY_PRIORITY[existing[i].category] ?? 500;
-                    if (existingPriority >= catPriority) {
-                      insertOrder = existing[i].sortOrder;
+                  // First try: find last task with the same category
+                  let foundSameCategory = false;
+                  for (let i = existing.length - 1; i >= 0; i--) {
+                    if (existing[i].category === category) {
+                      insertOrder = existing[i].sortOrder + 1;
+                      foundSameCategory = true;
                       break;
+                    }
+                  }
+                  // Fallback: if no same category exists, insert by priority order
+                  if (!foundSameCategory) {
+                    const catPriority = CONSTRUCTION_CATEGORY_PRIORITY[category] ?? 500;
+                    for (let i = 0; i < existing.length; i++) {
+                      const existingPriority = CONSTRUCTION_CATEGORY_PRIORITY[existing[i].category] ?? 500;
+                      if (existingPriority > catPriority) {
+                        insertOrder = existing[i].sortOrder;
+                        break;
+                      }
                     }
                   }
                   taskMutation.mutate({
@@ -2242,6 +2283,9 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
   const [newLogAttachments, setNewLogAttachments] = useState<string[]>([]);
   const [expandedSchedule, setExpandedSchedule] = useState<string | null>(null);
   const [expandedLog, setExpandedLog] = useState<string | null>(null);
+  const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null);
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [timeValue, setTimeValue] = useState({ hour: "09", minute: "00", ampm: "오전" });
 
   const { data: schedules } = useQuery<Schedule[]>({ queryKey: [`/api/projects/${projectId}/schedules`] });
   const { data: dailyLogs } = useQuery<DailyLog[]>({ queryKey: [`/api/projects/${projectId}/daily-logs`] });
@@ -2304,8 +2348,11 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
                   <div className="space-y-2">
                     <Label>시간</Label>
                     <div className="relative">
-                      <Input name="time" type="time" className="pl-9 cursor-pointer" />
-                      <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                      <Input name="time" type="time" className="pl-9" />
+                      <button type="button" className="absolute left-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-muted/60"
+                        onClick={() => setShowTimePicker(true)}>
+                        <Clock className="w-4 h-4 text-muted-foreground" />
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -2338,12 +2385,12 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
                 const isExpanded = expandedSchedule === s.id;
                 return (
                 <div key={s.id} className="p-3 rounded-lg border">
-                  <div className="flex items-start gap-3 cursor-pointer" onClick={() => setExpandedSchedule(isExpanded ? null : s.id)}>
-                    <div className="text-sm text-muted-foreground whitespace-nowrap">
+                  <div className="flex items-start gap-3">
+                    <div className="text-sm text-muted-foreground whitespace-nowrap cursor-pointer" onClick={() => setExpandedSchedule(isExpanded ? null : s.id)}>
                       <div>{s.date}</div>
                       {(s as any).time && <div className="text-xs">{(s as any).time}</div>}
                     </div>
-                    <div className="flex-1">
+                    <div className="flex-1 cursor-pointer" onClick={() => setExpandedSchedule(isExpanded ? null : s.id)}>
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium">{s.title}</span>
                         <Badge variant="outline" className={getScheduleCategoryColor(s.category)}>{getCategoryLabel(s.category)}</Badge>
@@ -2356,6 +2403,9 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
                       )}
                       {s.memo && <p className="text-xs text-muted-foreground mt-0.5">{s.memo}</p>}
                     </div>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => setEditingSchedule(s)}>
+                      <Pencil className="w-3.5 h-3.5" />
+                    </Button>
                   </div>
                   {/* Inline attachments when collapsed */}
                   {!isExpanded && sAttachments.length > 0 && (
@@ -2450,6 +2500,87 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
           )}
         </CardContent>
       </Card>
+
+      {/* 일정 수정 다이얼로그 */}
+      {editingSchedule && (
+        <Dialog open onOpenChange={() => setEditingSchedule(null)}>
+          <DialogContent>
+            <DialogHeader><DialogTitle>일정 수정</DialogTitle></DialogHeader>
+            <form onSubmit={(e) => {
+              e.preventDefault(); const fd = new FormData(e.currentTarget);
+              updateScheduleMutation.mutate({
+                id: editingSchedule.id,
+                data: {
+                  title: fd.get("title"), date: fd.get("date"),
+                  category: fd.get("category"), memo: fd.get("memo") || null,
+                  location: fd.get("location") || null, time: fd.get("time") || null,
+                },
+              });
+              setEditingSchedule(null);
+            }} className="space-y-4">
+              <div className="space-y-2"><Label>제목</Label><Input name="title" required defaultValue={editingSchedule.title} /></div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2"><Label>날짜</Label><DateInput name="date" required defaultValue={editingSchedule.date} /></div>
+                <div className="space-y-2">
+                  <Label>시간</Label>
+                  <div className="relative">
+                    <Input name="time" type="time" className="pl-9" defaultValue={(editingSchedule as any).time || ""} />
+                    <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-2"><Label>장소</Label><Input name="location" defaultValue={(editingSchedule as any).location || ""} /></div>
+              <div className="space-y-2"><Label>카테고리</Label>
+                <select name="category" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" defaultValue={editingSchedule.category}>
+                  <option value="MEETING">회의</option><option value="DEADLINE">마감</option>
+                  <option value="INSPECTION">검수</option><option value="CONSTRUCTION">시공</option>
+                </select>
+              </div>
+              <div className="space-y-2"><Label>메모</Label><Textarea name="memo" defaultValue={editingSchedule.memo || ""} /></div>
+              <Button type="submit" className="w-full">저장</Button>
+            </form>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* 시간 선택 모달 */}
+      {showTimePicker && (
+        <Dialog open onOpenChange={() => setShowTimePicker(false)}>
+          <DialogContent className="max-w-xs">
+            <DialogHeader><DialogTitle className="flex items-center gap-2"><Clock className="w-5 h-5" /> 시간 선택</DialogTitle></DialogHeader>
+            <div className="space-y-4">
+              <div className="flex items-center justify-center gap-2">
+                <select value={timeValue.ampm} onChange={(e) => setTimeValue(prev => ({ ...prev, ampm: e.target.value }))}
+                  className="rounded-md border border-input bg-background px-3 py-2 text-sm font-medium">
+                  <option value="오전">오전</option><option value="오후">오후</option>
+                </select>
+                <select value={timeValue.hour} onChange={(e) => setTimeValue(prev => ({ ...prev, hour: e.target.value }))}
+                  className="rounded-md border border-input bg-background px-3 py-2 text-lg font-medium w-16 text-center">
+                  {Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, "0")).map(h => (
+                    <option key={h} value={h}>{h}</option>
+                  ))}
+                </select>
+                <span className="text-lg font-bold">:</span>
+                <select value={timeValue.minute} onChange={(e) => setTimeValue(prev => ({ ...prev, minute: e.target.value }))}
+                  className="rounded-md border border-input bg-background px-3 py-2 text-lg font-medium w-16 text-center">
+                  {["00", "10", "15", "20", "30", "40", "45", "50"].map(m => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+              </div>
+              <Button className="w-full" onClick={() => {
+                let h = parseInt(timeValue.hour);
+                if (timeValue.ampm === "오후" && h !== 12) h += 12;
+                if (timeValue.ampm === "오전" && h === 12) h = 0;
+                const timeStr = `${String(h).padStart(2, "0")}:${timeValue.minute}`;
+                const input = document.querySelector('input[name="time"]') as HTMLInputElement;
+                if (input) { const nativeSet = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set; nativeSet?.call(input, timeStr); input.dispatchEvent(new Event('input', { bubbles: true })); }
+                setShowTimePicker(false);
+              }}>확인</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }
