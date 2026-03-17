@@ -13,8 +13,11 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth";
 import { DateInput } from "@/components/date-input";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, getAuthToken } from "@/lib/queryClient";
+
+const API_BASE = import.meta.env.VITE_API_URL || "";
 import {
   Plus, Calendar, FileText, Camera,
   MapPin, User, ExternalLink, X,
@@ -226,6 +229,98 @@ function getRequestPriorityLabel(p: string) {
 }
 
 // ─── Overview Tab ────────────────────────────────────────────
+function ProjectMembersCard({ projectId }: { projectId: string }) {
+  const { toast } = useToast();
+  const [addOpen, setAddOpen] = useState(false);
+  const { data: members } = useQuery<any[]>({ queryKey: [`/api/projects/${projectId}/members`] });
+  const { data: users } = useQuery<any[]>({ queryKey: ["/api/users"] });
+
+  const addMemberMutation = useMutation({
+    mutationFn: async (data: any) => { await apiRequest("POST", `/api/projects/${projectId}/members`, data); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/members`] }); toast({ title: "멤버가 추가되었습니다" }); setAddOpen(false); },
+    onError: (err: any) => { toast({ title: "오류", description: err.message, variant: "destructive" }); },
+  });
+
+  const removeMemberMutation = useMutation({
+    mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/projects/${projectId}/members`, { id }); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/members`] }); toast({ title: "멤버가 제거되었습니다" }); },
+  });
+
+  const memberUserIds = members?.map((m) => m.userId) ?? [];
+  const availableUsers = users?.filter((u) => !memberUserIds.includes(u.id)) ?? [];
+
+  const getMemberRoleLabel = (role: string) => {
+    const map: Record<string, string> = { PM: "매니저", MEMBER: "팀원", CLIENT: "건축주" };
+    return map[role] ?? role;
+  };
+
+  const getUserName = (userId: string) => {
+    const u = users?.find((u) => u.id === userId);
+    return u ? `${u.name} (${u.email})` : userId;
+  };
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <CardTitle className="flex items-center gap-2"><Users className="w-5 h-5" /> 프로젝트 멤버</CardTitle>
+        <Dialog open={addOpen} onOpenChange={setAddOpen}>
+          <DialogTrigger asChild><Button size="sm"><Plus className="w-4 h-4 mr-1" />멤버 추가</Button></DialogTrigger>
+          <DialogContent>
+            <DialogHeader><DialogTitle>프로젝트 멤버 추가</DialogTitle></DialogHeader>
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              const fd = new FormData(e.currentTarget);
+              addMemberMutation.mutate({ userId: fd.get("userId"), role: fd.get("role") });
+            }} className="space-y-4">
+              <div className="space-y-2">
+                <Label>사용자</Label>
+                <select name="userId" required className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+                  <option value="">선택...</option>
+                  {availableUsers.map((u) => (
+                    <option key={u.id} value={u.id}>{u.name} ({u.email}) - {u.role === "CLIENT" ? "건축주" : u.role === "PM" ? "매니저" : "팀원"}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label>프로젝트 역할</Label>
+                <select name="role" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" defaultValue="MEMBER">
+                  <option value="PM">매니저 (편집 권한)</option>
+                  <option value="MEMBER">팀원 (편집 권한)</option>
+                  <option value="CLIENT">건축주 (조회 권한)</option>
+                </select>
+              </div>
+              <Button type="submit" disabled={addMemberMutation.isPending} className="w-full">추가</Button>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </CardHeader>
+      <CardContent>
+        {!members?.length ? (
+          <p className="text-sm text-muted-foreground text-center py-4">등록된 멤버가 없습니다. 멤버를 추가하면 해당 프로젝트에 접근할 수 있습니다.</p>
+        ) : (
+          <div className="space-y-2">
+            {members.map((m) => (
+              <div key={m.id} className="flex items-center gap-3 p-3 rounded-lg border">
+                <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary text-sm font-medium">
+                  {getUserName(m.userId).charAt(0)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium">{getUserName(m.userId)}</p>
+                </div>
+                <Badge variant="outline">{getMemberRoleLabel(m.role)}</Badge>
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive"
+                  onClick={() => { if (confirm("이 멤버를 제거하시겠습니까?")) removeMemberMutation.mutate(m.id); }}>
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function OverviewTab({ project }: { project: Project }) {
   const { toast } = useToast();
   const [editOpen, setEditOpen] = useState(false);
@@ -285,6 +380,9 @@ function OverviewTab({ project }: { project: Project }) {
           </div>
         </CardContent>
       </Card>
+
+      {/* 프로젝트 멤버 */}
+      <ProjectMembersCard projectId={project.id} />
 
       {/* 건축 개요 */}
       <Card>
@@ -489,8 +587,10 @@ function DesignTab({ projectId }: { projectId: string }) {
   });
 
   const toggleCheckMutation = useMutation({
-    mutationFn: async ({ id, isCompleted }: { id: string; isCompleted: number }) => {
-      await apiRequest("PATCH", `/api/design-checks/${id}`, { isCompleted, completedAt: isCompleted ? new Date().toISOString() : null });
+    mutationFn: async ({ id, ...data }: { id: string; [key: string]: any }) => {
+      const patchData = { ...data };
+      if ('isCompleted' in patchData) patchData.completedAt = patchData.isCompleted ? new Date().toISOString() : null;
+      await apiRequest("PATCH", `/api/design-checks/${id}`, patchData);
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/design-checks`] }); },
   });
@@ -587,7 +687,9 @@ function DesignTab({ projectId }: { projectId: string }) {
                 <div key={cat}>
                   <h4 className="text-sm font-semibold text-muted-foreground mb-2">{getDesignCheckCategoryLabel(cat)}</h4>
                   <div className="space-y-2">
-                    {items.map((item) => (
+                    {items.map((item) => {
+                      const itemAttachments: string[] = (item as any).attachments ? JSON.parse((item as any).attachments) : [];
+                      return (
                       <div key={item.id} className="p-3 rounded-lg border hover:bg-muted/30">
                         <div className="flex items-start gap-3">
                           <input type="checkbox" checked={item.isCompleted === 1}
@@ -597,12 +699,47 @@ function DesignTab({ projectId }: { projectId: string }) {
                             <div className="flex items-center gap-2">
                               <span className={`text-sm font-medium ${item.isCompleted === 1 ? "line-through text-muted-foreground" : ""}`}>{item.title}</span>
                               {(item as any).linkedToConstruction === 1 && <Badge variant="outline" className="text-xs px-1.5">시공연동</Badge>}
+                              {itemAttachments.length > 0 && <span className="text-xs text-muted-foreground"><Camera className="w-3 h-3 inline" /> {itemAttachments.length}</span>}
                             </div>
                             {item.memo && <p className="text-sm text-muted-foreground mt-1">{item.memo}</p>}
+                            {itemAttachments.length > 0 && (
+                              <div className="grid grid-cols-4 gap-1 mt-2">
+                                {itemAttachments.map((url, i) => (
+                                  <div key={i} className="aspect-square rounded overflow-hidden border">
+                                    <img src={url} alt="" className="w-full h-full object-cover" />
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            <div className="mt-1">
+                              <label className="text-xs text-primary cursor-pointer hover:underline">
+                                사진/파일 첨부
+                                <input type="file" accept="image/*" multiple className="hidden" onChange={async (e) => {
+                                  const files = e.target.files;
+                                  if (!files?.length) return;
+                                  try {
+                                    const fd = new FormData();
+                                    for (const f of Array.from(files).slice(0, 10)) fd.append("photos", f);
+                                    fd.append("phase", "DESIGN");
+                                    fd.append("subCategory", "체크리스트첨부");
+                                    const res = await fetch(`${API_BASE}/api/projects/${projectId}/photos/upload`, {
+                                      method: "POST", headers: { Authorization: `Bearer ${getAuthToken()}` }, body: fd,
+                                    });
+                                    if (!res.ok) throw new Error("업로드 실패");
+                                    const uploaded = await res.json();
+                                    const urls = uploaded.map((p: any) => p.imageUrl);
+                                    toggleCheckMutation.mutate({ id: item.id, attachments: JSON.stringify([...itemAttachments, ...urls]) });
+                                    toast({ title: "파일이 첨부되었습니다" });
+                                  } catch { toast({ title: "업로드 실패", variant: "destructive" }); }
+                                  e.target.value = "";
+                                }} />
+                              </label>
+                            </div>
                           </div>
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               ))}
@@ -720,9 +857,13 @@ function DesignTab({ projectId }: { projectId: string }) {
 // ─── Shared Requests Section ─────────────────────────────────
 function RequestsSection({ projectId, phase }: { projectId: string; phase: string }) {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [expandedReq, setExpandedReq] = useState<string | null>(null);
   const [uploadingReq, setUploadingReq] = useState(false);
+  const [editingReq, setEditingReq] = useState<ClientRequest | null>(null);
+  const isAdmin = user?.role === "SUPER_ADMIN";
+  const isPM = user?.role === "PM" || isAdmin;
 
   const { data: allRequests } = useQuery<ClientRequest[]>({ queryKey: [`/api/projects/${projectId}/requests`] });
   const requests = allRequests?.filter((r) => r.phase === phase) ?? [];
@@ -741,6 +882,11 @@ function RequestsSection({ projectId, phase }: { projectId: string; phase: strin
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/requests`] }); },
   });
 
+  const deleteRequestMutation = useMutation({
+    mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/requests/${id}`); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/requests`] }); toast({ title: "요청사항이 삭제되었습니다" }); setExpandedReq(null); },
+  });
+
   const commentMutation = useMutation({
     mutationFn: async ({ requestId, content }: { requestId: string; content: string }) => {
       await apiRequest("POST", `/api/requests/${requestId}/comments`, { content });
@@ -756,8 +902,7 @@ function RequestsSection({ projectId, phase }: { projectId: string; phase: strin
       for (const f of Array.from(files)) fd.append("photos", f);
       fd.append("phase", phase);
       fd.append("subCategory", "요청첨부");
-      const { getAuthToken } = await import("@/lib/queryClient");
-      const res = await fetch(`/api/projects/${projectId}/photos/upload`, {
+      const res = await fetch(`${API_BASE}/api/projects/${projectId}/photos/upload`, {
         method: "POST", headers: { Authorization: `Bearer ${getAuthToken()}` }, body: fd,
       });
       if (!res.ok) throw new Error("업로드 실패");
@@ -862,17 +1007,35 @@ function RequestsSection({ projectId, phase }: { projectId: string; phase: strin
                         </div>
                       )}
                       <div className="flex items-center gap-2 flex-wrap">
-                        <Label className="text-xs">상태:</Label>
-                        <select value={req.status} onChange={(e) => updateRequestMutation.mutate({ id: req.id, data: { status: e.target.value } })}
-                          className="rounded-md border border-input bg-background px-2 py-1 text-xs">
-                          <option value="NEW">신규</option><option value="REVIEWING">검토중</option><option value="IN_PROGRESS">진행중</option>
-                          <option value="RESOLVED">해결</option><option value="ON_HOLD">보류</option><option value="REJECTED">반려</option>
-                        </select>
+                        {isPM && (
+                          <>
+                            <Label className="text-xs">상태:</Label>
+                            <select value={req.status} onChange={(e) => updateRequestMutation.mutate({ id: req.id, data: { status: e.target.value } })}
+                              className="rounded-md border border-input bg-background px-2 py-1 text-xs">
+                              <option value="NEW">신규</option><option value="REVIEWING">검토중</option><option value="IN_PROGRESS">진행중</option>
+                              <option value="RESOLVED">해결</option><option value="ON_HOLD">보류</option><option value="REJECTED">반려</option>
+                            </select>
+                          </>
+                        )}
                         <label className="text-xs text-primary cursor-pointer hover:underline ml-auto">
                           {uploadingReq ? "업로드 중..." : "파일 첨부"}
                           <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => { if (e.target.files) handleReqFileUpload(req.id, e.target.files); }} />
                         </label>
                         <span className="text-xs text-muted-foreground">Ctrl+V 붙여넣기 가능</span>
+                      </div>
+                      {/* 수정/삭제 버튼 */}
+                      <div className="flex items-center gap-2">
+                        {(isPM || req.createdBy === user?.id) && (
+                          <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setEditingReq(req)}>
+                            <Pencil className="w-3 h-3 mr-1" />수정
+                          </Button>
+                        )}
+                        {(isAdmin || req.createdBy === user?.id) && (
+                          <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:text-destructive"
+                            onClick={() => { if (confirm("이 요청사항을 삭제하시겠습니까?")) deleteRequestMutation.mutate(req.id); }}>
+                            <Trash2 className="w-3 h-3 mr-1" />삭제
+                          </Button>
+                        )}
                       </div>
                       <div className="space-y-2">
                         <p className="text-xs font-semibold">댓글</p>
@@ -896,6 +1059,45 @@ function RequestsSection({ projectId, phase }: { projectId: string; phase: strin
           </div>
         )}
       </CardContent>
+      {/* 요청사항 수정 다이얼로그 */}
+      {editingReq && (
+        <Dialog open onOpenChange={() => setEditingReq(null)}>
+          <DialogContent>
+            <DialogHeader><DialogTitle>요청사항 수정</DialogTitle></DialogHeader>
+            <form onSubmit={(e) => {
+              e.preventDefault(); const fd = new FormData(e.currentTarget);
+              updateRequestMutation.mutate({
+                id: editingReq.id,
+                data: {
+                  title: fd.get("title"),
+                  content: fd.get("content"),
+                  category: fd.get("category"),
+                  priority: fd.get("priority"),
+                },
+              });
+              setEditingReq(null);
+            }} className="space-y-4">
+              <div className="space-y-2"><Label>제목</Label><Input name="title" defaultValue={editingReq.title} required /></div>
+              <div className="space-y-2"><Label>내용</Label><Textarea name="content" defaultValue={editingReq.content} required /></div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2"><Label>분류</Label>
+                  <select name="category" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" defaultValue={editingReq.category}>
+                    <option value="DESIGN_CHANGE">설계변경</option><option value="MATERIAL_CHANGE">자재변경</option>
+                    <option value="ADDITIONAL_WORK">추가공사</option><option value="SCHEDULE_CHANGE">일정변경</option><option value="OTHER">기타</option>
+                  </select>
+                </div>
+                <div className="space-y-2"><Label>우선순위</Label>
+                  <select name="priority" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" defaultValue={editingReq.priority}>
+                    <option value="URGENT">긴급</option><option value="HIGH">높음</option>
+                    <option value="NORMAL">보통</option><option value="LOW">낮음</option>
+                  </select>
+                </div>
+              </div>
+              <Button type="submit" className="w-full">저장</Button>
+            </form>
+          </DialogContent>
+        </Dialog>
+      )}
     </Card>
   );
 }
@@ -925,8 +1127,7 @@ function SortableTaskItem({ task, isExpanded, onToggle, progress, onProgressChan
       for (const f of Array.from(files)) fd.append("photos", f);
       fd.append("phase", "CONSTRUCTION");
       fd.append("subCategory", task.category);
-      const { getAuthToken } = await import("@/lib/queryClient");
-      const res = await fetch(`/api/projects/${projectId}/photos/upload`, {
+      const res = await fetch(`${API_BASE}/api/projects/${projectId}/photos/upload`, {
         method: "POST", headers: { Authorization: `Bearer ${getAuthToken()}` }, body: fd,
       });
       if (!res.ok) throw new Error("업로드 실패");
@@ -1118,8 +1319,10 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
   });
 
   const toggleCheckMutation = useMutation({
-    mutationFn: async ({ id, isCompleted }: { id: string; isCompleted: number }) => {
-      await apiRequest("PATCH", `/api/design-checks/${id}`, { isCompleted, completedAt: isCompleted ? new Date().toISOString() : null });
+    mutationFn: async ({ id, ...data }: { id: string; [key: string]: any }) => {
+      const patchData = { ...data };
+      if ('isCompleted' in patchData) patchData.completedAt = patchData.isCompleted ? new Date().toISOString() : null;
+      await apiRequest("PATCH", `/api/design-checks/${id}`, patchData);
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/design-checks`] }); },
   });
@@ -1288,7 +1491,9 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
             <div>
               {linkedDesignChecks.length > 0 && <h4 className="text-xs font-semibold text-muted-foreground mb-2">시공 항목</h4>}
               <div className="space-y-2">
-                {constructionChecks.map((item) => (
+                {constructionChecks.map((item) => {
+                  const cAttachments: string[] = (item as any).attachments ? JSON.parse((item as any).attachments) : [];
+                  return (
                   <div key={item.id} className="p-3 rounded-lg border hover:bg-muted/30">
                     <div className="flex items-start gap-3">
                       <input type="checkbox" checked={item.isCompleted === 1}
@@ -1298,12 +1503,47 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
                         <div className="flex items-center gap-2">
                           <Badge variant="outline" className="text-xs px-1.5">{item.category}</Badge>
                           <span className={`text-sm font-medium ${item.isCompleted === 1 ? "line-through text-muted-foreground" : ""}`}>{item.title}</span>
+                          {cAttachments.length > 0 && <span className="text-xs text-muted-foreground"><Camera className="w-3 h-3 inline" /> {cAttachments.length}</span>}
                         </div>
                         {item.memo && <p className="text-sm text-muted-foreground mt-1">{item.memo}</p>}
+                        {cAttachments.length > 0 && (
+                          <div className="grid grid-cols-4 gap-1 mt-2">
+                            {cAttachments.map((url, i) => (
+                              <div key={i} className="aspect-square rounded overflow-hidden border">
+                                <img src={url} alt="" className="w-full h-full object-cover" />
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <div className="mt-1">
+                          <label className="text-xs text-primary cursor-pointer hover:underline">
+                            사진/파일 첨부
+                            <input type="file" accept="image/*" multiple className="hidden" onChange={async (e) => {
+                              const files = e.target.files;
+                              if (!files?.length) return;
+                              try {
+                                const fd = new FormData();
+                                for (const f of Array.from(files).slice(0, 10)) fd.append("photos", f);
+                                fd.append("phase", "CONSTRUCTION");
+                                fd.append("subCategory", "체크리스트첨부");
+                                const res = await fetch(`${API_BASE}/api/projects/${projectId}/photos/upload`, {
+                                  method: "POST", headers: { Authorization: `Bearer ${getAuthToken()}` }, body: fd,
+                                });
+                                if (!res.ok) throw new Error("업로드 실패");
+                                const uploaded = await res.json();
+                                const urls = uploaded.map((p: any) => p.imageUrl);
+                                toggleCheckMutation.mutate({ id: item.id, attachments: JSON.stringify([...cAttachments, ...urls]) });
+                                toast({ title: "파일이 첨부되었습니다" });
+                              } catch { toast({ title: "업로드 실패", variant: "destructive" }); }
+                              e.target.value = "";
+                            }} />
+                          </label>
+                        </div>
                       </div>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
@@ -1841,8 +2081,7 @@ function PhotosTab({ projectId, currentPhase, project }: { projectId: string; cu
       }
       uploadData.append("phase", phase);
       if (subCategory) uploadData.append("subCategory", subCategory);
-      const { getAuthToken } = await import("@/lib/queryClient");
-      const res = await fetch(`/api/projects/${projectId}/photos/upload`, {
+      const res = await fetch(`${API_BASE}/api/projects/${projectId}/photos/upload`, {
         method: "POST",
         headers: { Authorization: `Bearer ${getAuthToken()}` },
         body: uploadData,
@@ -1893,7 +2132,7 @@ function PhotosTab({ projectId, currentPhase, project }: { projectId: string; cu
     uploadData.append("subCategory", fd.get("subCategory") as string);
 
     try {
-      const res = await fetch(`/api/projects/${projectId}/photos/upload`, {
+      const res = await fetch(`${API_BASE}/api/projects/${projectId}/photos/upload`, {
         method: "POST",
         headers: { Authorization: `Bearer ${(await import("@/lib/queryClient")).getAuthToken()}` },
         body: uploadData,
@@ -1913,8 +2152,7 @@ function PhotosTab({ projectId, currentPhase, project }: { projectId: string; cu
   const handleDownloadZip = async () => {
     setDownloading(true);
     try {
-      const { getAuthToken } = await import("@/lib/queryClient");
-      const res = await fetch(`/api/projects/${projectId}/photos/download-zip`, {
+      const res = await fetch(`${API_BASE}/api/projects/${projectId}/photos/download-zip`, {
         headers: { Authorization: `Bearer ${getAuthToken()}` },
       });
       if (!res.ok) throw new Error("다운로드 실패");

@@ -43,7 +43,7 @@ export function AppSidebar() {
           data-testid="sidebar-logo"
         >
           <Building2 className="w-7 h-7 text-primary" />
-          <span className="text-lg font-bold text-foreground">BuildFlow</span>
+          <span className="text-lg font-bold text-foreground">BuildWorking</span>
         </div>
       </SidebarHeader>
       <SidebarContent>
@@ -83,7 +83,7 @@ export function AppSidebar() {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium truncate">{user?.name}</p>
-            <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
+            <p className="text-xs text-muted-foreground truncate">@{user?.email}</p>
           </div>
           <Button
             variant="ghost"

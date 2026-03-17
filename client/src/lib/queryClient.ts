@@ -1,6 +1,6 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
-const API_BASE = "__PORT_5000__".startsWith("__") ? "" : "__PORT_5000__";
+const API_BASE = import.meta.env.VITE_API_URL || "";
 
 // Global token ref that auth context updates
 let _authToken: string | null = null;

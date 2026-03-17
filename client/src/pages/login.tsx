@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 export default function LoginPage() {
   const { login } = useAuth();
   const { toast } = useToast();
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -18,7 +18,7 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      await login(email, password);
+      await login(username, password);
     } catch (err: any) {
       toast({ title: "로그인 실패", description: err.message, variant: "destructive" });
     } finally {
@@ -33,21 +33,21 @@ export default function LoginPage() {
           <div className="flex justify-center mb-2">
             <Building2 className="w-10 h-10 text-primary" />
           </div>
-          <CardTitle className="text-2xl">BuildFlow</CardTitle>
+          <CardTitle className="text-2xl">BuildWorking</CardTitle>
           <CardDescription>건축 프로젝트 관리 시스템</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4" data-testid="login-form">
             <div className="space-y-2">
-              <Label htmlFor="email">이메일</Label>
+              <Label htmlFor="username">아이디</Label>
               <Input
-                id="email"
-                type="email"
-                placeholder="이메일을 입력하세요"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                id="username"
+                type="text"
+                placeholder="아이디를 입력하세요"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
                 required
-                data-testid="email-input"
+                data-testid="username-input"
               />
             </div>
             <div className="space-y-2">
@@ -66,10 +66,6 @@ export default function LoginPage() {
               {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
               로그인
             </Button>
-            <div className="text-xs text-muted-foreground text-center space-y-1">
-              <p>관리자: admin@buildflow.com / admin123</p>
-              <p>건축주: client@buildflow.com / client123</p>
-            </div>
           </form>
         </CardContent>
       </Card>

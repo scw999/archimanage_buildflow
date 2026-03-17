@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Plus, MapPin, Search, FolderKanban } from "lucide-react";
 import type { Project } from "@shared/schema";
@@ -21,6 +22,8 @@ import { ProjectPhase, ProjectStatus } from "@shared/schema";
 export default function ProjectsPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "SUPER_ADMIN";
   const [search, setSearch] = useState("");
   const [phaseFilter, setPhaseFilter] = useState<string>("ALL");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
@@ -95,7 +98,7 @@ export default function ProjectsPage() {
               전체 프로젝트를 관리하고 새 프로젝트를 생성합니다
             </p>
           </div>
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          {isAdmin && <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button data-testid="new-project-button">
                 <Plus className="w-4 h-4 mr-2" />
@@ -143,7 +146,7 @@ export default function ProjectsPage() {
                 </Button>
               </form>
             </DialogContent>
-          </Dialog>
+          </Dialog>}
         </div>
 
         {/* Filters */}

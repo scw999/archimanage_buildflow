@@ -27,11 +27,12 @@ export default function SettingsPage() {
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<SafeUser | null>(null);
-  const isPM = user?.role === "PM" || user?.role === "SUPER_ADMIN";
+  const isAdmin = user?.role === "SUPER_ADMIN";
+  const isPM = user?.role === "PM" || isAdmin;
 
   const { data: users } = useQuery<SafeUser[]>({
     queryKey: ["/api/users"],
-    enabled: isPM,
+    enabled: isAdmin,
   });
 
   const createUserMutation = useMutation({
@@ -94,7 +95,7 @@ export default function SettingsPage() {
                 <p className="text-sm font-medium">{user?.name}</p>
               </div>
               <div>
-                <Label className="text-xs text-muted-foreground">이메일</Label>
+                <Label className="text-xs text-muted-foreground">아이디</Label>
                 <p className="text-sm font-medium">{user?.email}</p>
               </div>
               <div>
@@ -149,8 +150,8 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* User management (PM/Admin only) */}
-        {isPM && (
+        {/* User management (Admin only) */}
+        {isAdmin && (
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="flex items-center gap-2">
@@ -181,8 +182,8 @@ export default function SettingsPage() {
                       <Input id="u-name" name="name" required data-testid="user-name-input" />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="u-email">이메일</Label>
-                      <Input id="u-email" name="email" type="email" required data-testid="user-email-input" />
+                      <Label htmlFor="u-email">아이디</Label>
+                      <Input id="u-email" name="email" type="text" required placeholder="영문, 숫자 조합" data-testid="user-email-input" />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="u-password">비밀번호</Label>
@@ -191,6 +192,7 @@ export default function SettingsPage() {
                     <div className="space-y-2">
                       <Label>역할</Label>
                       <select name="role" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" defaultValue="MEMBER" data-testid="user-role-select">
+                        {user?.role === "SUPER_ADMIN" && <option value="SUPER_ADMIN">최고관리자</option>}
                         <option value="PM">프로젝트매니저</option>
                         <option value="MEMBER">팀원</option>
                         <option value="CLIENT">건축주</option>
@@ -213,7 +215,7 @@ export default function SettingsPage() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium">{u.name}</p>
-                        <p className="text-xs text-muted-foreground">{u.email}</p>
+                        <p className="text-xs text-muted-foreground">@{u.email}</p>
                       </div>
                       <Badge variant="outline">{getRoleLabel(u.role)}</Badge>
                       {u.id !== user?.id && (
