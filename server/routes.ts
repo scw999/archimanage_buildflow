@@ -220,7 +220,7 @@ export async function registerRoutes(
   });
 
   // Photo file upload (R2 or local)
-  app.post("/api/projects/:id/photos/upload", authMiddleware, upload.array("photos", 20), async (req: Request, res: Response) => {
+  app.post("/api/projects/:id/photos/upload", authMiddleware, upload.array("photos", 10), async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const files = req.files as Express.Multer.File[];
     if (!files || files.length === 0) return res.status(400).json({ message: "파일이 없습니다" });

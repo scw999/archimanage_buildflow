@@ -596,7 +596,7 @@ function DesignTab({ projectId }: { projectId: string }) {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
                               <span className={`text-sm font-medium ${item.isCompleted === 1 ? "line-through text-muted-foreground" : ""}`}>{item.title}</span>
-                              {(item as any).linkedToConstruction === 1 && <Badge variant="outline" className="text-[10px] px-1">시공연동</Badge>}
+                              {(item as any).linkedToConstruction === 1 && <Badge variant="outline" className="text-xs px-1.5">시공연동</Badge>}
                             </div>
                             {item.memo && <p className="text-sm text-muted-foreground mt-1">{item.memo}</p>}
                           </div>
@@ -771,21 +771,20 @@ function RequestsSection({ projectId, phase }: { projectId: string; phase: strin
     finally { setUploadingReq(false); }
   };
 
-  // Paste handler for requests
+  // Paste handler for requests - supports multiple images
   const handleReqPaste = async (e: React.ClipboardEvent, reqId: string) => {
     const items = e.clipboardData?.items;
     if (!items) return;
+    const dt = new DataTransfer();
     for (const item of Array.from(items)) {
       if (item.type.startsWith("image/")) {
         e.preventDefault();
         const file = item.getAsFile();
-        if (file) {
-          const dt = new DataTransfer();
-          dt.items.add(file);
-          await handleReqFileUpload(reqId, dt.files);
-        }
-        break;
+        if (file && dt.items.length < 10) dt.items.add(file);
       }
+    }
+    if (dt.files.length > 0) {
+      await handleReqFileUpload(reqId, dt.files);
     }
   };
 
@@ -873,7 +872,7 @@ function RequestsSection({ projectId, phase }: { projectId: string; phase: strin
                           {uploadingReq ? "업로드 중..." : "파일 첨부"}
                           <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => { if (e.target.files) handleReqFileUpload(req.id, e.target.files); }} />
                         </label>
-                        <span className="text-[10px] text-muted-foreground">Ctrl+V 붙여넣기 가능</span>
+                        <span className="text-xs text-muted-foreground">Ctrl+V 붙여넣기 가능</span>
                       </div>
                       <div className="space-y-2">
                         <p className="text-xs font-semibold">댓글</p>
@@ -1270,7 +1269,7 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
                         className="w-4 h-4 rounded border-gray-300 mt-0.5 shrink-0" />
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="text-[10px] px-1">{getDesignCheckCategoryLabel(item.category)}</Badge>
+                          <Badge variant="outline" className="text-xs px-1.5">{getDesignCheckCategoryLabel(item.category)}</Badge>
                           <span className={`text-sm font-medium ${item.isCompleted === 1 ? "line-through text-muted-foreground" : ""}`}>{item.title}</span>
                         </div>
                         {item.memo && <p className="text-sm text-muted-foreground mt-1">{item.memo}</p>}
@@ -1297,7 +1296,7 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
                         className="w-4 h-4 rounded border-gray-300 mt-0.5 shrink-0" />
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="text-[10px] px-1">{item.category}</Badge>
+                          <Badge variant="outline" className="text-xs px-1.5">{item.category}</Badge>
                           <span className={`text-sm font-medium ${item.isCompleted === 1 ? "line-through text-muted-foreground" : ""}`}>{item.title}</span>
                         </div>
                         {item.memo && <p className="text-sm text-muted-foreground mt-1">{item.memo}</p>}
@@ -1802,23 +1801,27 @@ function PhotosTab({ projectId, currentPhase, project }: { projectId: string; cu
   const [uploading, setUploading] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [uploadPhase, setUploadPhase] = useState(currentPhase);
-  const [pastedFile, setPastedFile] = useState<File | null>(null);
+  const [pastedFiles, setPastedFiles] = useState<File[]>([]);
   const { data: photos } = useQuery<Photo[]>({ queryKey: [`/api/projects/${projectId}/photos`] });
 
-  // Clipboard paste handler
+  // Clipboard paste handler - accumulate up to 10 images
   const handlePaste = useCallback(async (e: ClipboardEvent) => {
     const items = e.clipboardData?.items;
     if (!items) return;
+    const newFiles: File[] = [];
     for (const item of Array.from(items)) {
       if (item.type.startsWith("image/")) {
         e.preventDefault();
         const file = item.getAsFile();
-        if (file) {
-          setPastedFile(file);
-          setUploadDialogOpen(true);
-        }
-        break;
+        if (file) newFiles.push(file);
       }
+    }
+    if (newFiles.length > 0) {
+      setPastedFiles((prev) => {
+        const combined = [...prev, ...newFiles].slice(0, 10);
+        return combined;
+      });
+      setUploadDialogOpen(true);
     }
   }, []);
 
@@ -1827,13 +1830,15 @@ function PhotosTab({ projectId, currentPhase, project }: { projectId: string; cu
     return () => document.removeEventListener("paste", handlePaste);
   }, [handlePaste]);
 
-  // Upload pasted file
-  const uploadPastedFile = async (phase: string, subCategory: string) => {
-    if (!pastedFile) return;
+  // Upload pasted files (multiple)
+  const uploadPastedFiles = async (phase: string, subCategory: string) => {
+    if (!pastedFiles.length) return;
     setUploading(true);
     try {
       const uploadData = new FormData();
-      uploadData.append("photos", pastedFile);
+      for (const file of pastedFiles) {
+        uploadData.append("photos", file);
+      }
       uploadData.append("phase", phase);
       if (subCategory) uploadData.append("subCategory", subCategory);
       const { getAuthToken } = await import("@/lib/queryClient");
@@ -1844,8 +1849,8 @@ function PhotosTab({ projectId, currentPhase, project }: { projectId: string; cu
       });
       if (!res.ok) throw new Error(await res.text());
       queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/photos`] });
-      toast({ title: "붙여넣기 사진이 업로드되었습니다" });
-      setPastedFile(null);
+      toast({ title: `${pastedFiles.length}장의 붙여넣기 사진이 업로드되었습니다` });
+      setPastedFiles([]);
       setUploadDialogOpen(false);
     } catch (err: any) {
       toast({ title: "업로드 실패", description: err.message, variant: "destructive" });
@@ -1877,20 +1882,17 @@ function PhotosTab({ projectId, currentPhase, project }: { projectId: string; cu
     const fd = new FormData(e.currentTarget);
     const fileInput = e.currentTarget.querySelector('input[type="file"]') as HTMLInputElement;
     if (!fileInput?.files?.length) { toast({ title: "파일을 선택해주세요", variant: "destructive" }); return; }
+    if (fileInput.files.length > 10) { toast({ title: "최대 10장까지 업로드 가능합니다", variant: "destructive" }); return; }
 
     setUploading(true);
     const uploadData = new FormData();
-    for (const file of Array.from(fileInput.files)) {
+    for (const file of Array.from(fileInput.files).slice(0, 10)) {
       uploadData.append("photos", file);
     }
     uploadData.append("phase", fd.get("phase") as string);
     uploadData.append("subCategory", fd.get("subCategory") as string);
 
     try {
-      const token = (window as any).__authToken;
-      const headers: Record<string, string> = {};
-      // Get token from queryClient default options
-      const stored = document.cookie.match(/token=([^;]+)/);
       const res = await fetch(`/api/projects/${projectId}/photos/upload`, {
         method: "POST",
         headers: { Authorization: `Bearer ${(await import("@/lib/queryClient")).getAuthToken()}` },
@@ -1984,16 +1986,27 @@ function PhotosTab({ projectId, currentPhase, project }: { projectId: string; cu
               {downloading ? "다운로드 중..." : "ZIP 다운로드"}
             </Button>
           )}
-          <Dialog open={uploadDialogOpen} onOpenChange={(o) => { setUploadDialogOpen(o); if (!o) setPastedFile(null); }}>
+          <Dialog open={uploadDialogOpen} onOpenChange={(o) => { setUploadDialogOpen(o); if (!o) setPastedFiles([]); }}>
             <DialogTrigger asChild><Button size="sm"><Plus className="w-4 h-4 mr-1" />사진 업로드</Button></DialogTrigger>
             <DialogContent>
-              <DialogHeader><DialogTitle>{pastedFile ? "붙여넣기 사진 업로드" : "사진 파일 업로드"}</DialogTitle></DialogHeader>
-              {pastedFile ? (
+              <DialogHeader><DialogTitle>{pastedFiles.length > 0 ? `붙여넣기 사진 업로드 (${pastedFiles.length}/10)` : "사진 파일 업로드"}</DialogTitle></DialogHeader>
+              {pastedFiles.length > 0 ? (
                 <div className="space-y-4">
-                  <div className="border rounded-lg overflow-hidden max-h-48 flex items-center justify-center bg-muted">
-                    <img src={URL.createObjectURL(pastedFile)} alt="미리보기" className="max-h-48 object-contain" />
+                  <div className="grid grid-cols-3 gap-2 max-h-48 overflow-y-auto">
+                    {pastedFiles.map((file, idx) => (
+                      <div key={idx} className="relative aspect-square rounded-lg overflow-hidden border bg-muted group">
+                        <img src={URL.createObjectURL(file)} alt={`미리보기 ${idx + 1}`} className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          className="absolute top-1 right-1 bg-black/60 text-white rounded-full w-5 h-5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={() => setPastedFiles((prev) => prev.filter((_, i) => i !== idx))}
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
                   </div>
-                  <p className="text-xs text-muted-foreground text-center">클립보드에서 붙여넣은 이미지</p>
+                  <p className="text-sm text-muted-foreground text-center">Ctrl+V로 이미지를 더 붙여넣을 수 있습니다 (최대 10장)</p>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2"><Label>페이즈</Label>
                       <select id="paste-phase" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
@@ -2010,9 +2023,9 @@ function PhotosTab({ projectId, currentPhase, project }: { projectId: string; cu
                   </div>
                   <Button onClick={() => {
                     const sub = (document.getElementById("paste-sub") as HTMLSelectElement)?.value || "";
-                    uploadPastedFile(uploadPhase, sub);
+                    uploadPastedFiles(uploadPhase, sub);
                   }} disabled={uploading} className="w-full">
-                    {uploading ? "업로드 중..." : "업로드"}
+                    {uploading ? "업로드 중..." : `${pastedFiles.length}장 업로드`}
                   </Button>
                 </div>
               ) : (
@@ -2020,7 +2033,7 @@ function PhotosTab({ projectId, currentPhase, project }: { projectId: string; cu
                   <div className="space-y-2">
                     <Label>사진 파일 (여러 장 선택 가능)</Label>
                     <Input type="file" accept="image/*" multiple required className="cursor-pointer" />
-                    <p className="text-xs text-muted-foreground">최대 20장, 각 20MB 이하. Ctrl+V로 이미지 붙여넣기도 가능합니다.</p>
+                    <p className="text-sm text-muted-foreground">최대 10장, 각 20MB 이하. Ctrl+V로 이미지 붙여넣기도 가능합니다.</p>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2"><Label>페이즈</Label>
@@ -2120,7 +2133,7 @@ function PhotosTab({ projectId, currentPhase, project }: { projectId: string; cu
                                   <div key={p.id} className="aspect-square rounded-lg overflow-hidden border cursor-pointer hover:opacity-80 transition-opacity relative group"
                                     onClick={() => setLightbox(p)}>
                                     <img src={p.imageUrl} alt={p.description || ""} className="w-full h-full object-cover" />
-                                    <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[10px] p-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs p-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                                       {p.takenAt || "날짜없음"}
                                       {p.description && ` - ${p.description}`}
                                     </div>
