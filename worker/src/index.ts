@@ -30,6 +30,9 @@ app.use("*", async (c, next) => {
     const raw = c.env.DB;
     try { await raw.prepare("ALTER TABLE inspections ADD COLUMN attachments TEXT").run(); } catch { /* already exists */ }
     try { await raw.prepare("ALTER TABLE defects ADD COLUMN attachments TEXT").run(); } catch { /* already exists */ }
+    try { await raw.prepare("ALTER TABLE schedules ADD COLUMN attachments TEXT").run(); } catch { /* already exists */ }
+    try { await raw.prepare("ALTER TABLE daily_logs ADD COLUMN attachments TEXT").run(); } catch { /* already exists */ }
+    try { await raw.prepare("ALTER TABLE design_changes ADD COLUMN attachments TEXT").run(); } catch { /* already exists */ }
   }
   await next();
 });
