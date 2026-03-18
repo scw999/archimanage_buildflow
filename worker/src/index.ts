@@ -22,6 +22,12 @@ const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 // CORS
 app.use("*", cors({ origin: "*", allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"], allowHeaders: ["Content-Type", "Authorization"] }));
 
+// Global error handler with CORS
+app.onError((err, c) => {
+  console.error("Worker error:", err.message);
+  return c.json({ message: err.message || "서버 오류" }, 500);
+});
+
 // Auto-migrate: ensure attachments columns exist (safe - ALTER TABLE fails silently if column exists)
 let migrated = false;
 app.use("*", async (c, next) => {

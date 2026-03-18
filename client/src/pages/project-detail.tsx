@@ -258,7 +258,12 @@ function safeParseAttachments(val: any): string[] {
 }
 
 function isImageLikeUrl(url: string) {
-  return /\.(png|jpe?g|gif|webp|bmp|svg)(\?.*)?$/i.test(url) || url.includes("/api/photos/file/") || url.includes("/uploads/photos/");
+  const imageExts = /\.(png|jpe?g|gif|webp|bmp|svg)(\?.*)?$/i;
+  if (imageExts.test(url)) return true;
+  // R2/local photos: check extension before the query string
+  const cleanUrl = url.split("?")[0];
+  if ((url.includes("/api/photos/file/") || url.includes("/uploads/photos/")) && imageExts.test(cleanUrl)) return true;
+  return false;
 }
 
 function extractGoogleDriveFileId(url: string) {
@@ -2919,11 +2924,11 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
                   }} />
                 )}
                 <FileDropZone projectId={projectId} phase={currentPhase} subCategory="일정첨부" acceptFiles
-                  existingUrls={editSchedAttachments}
+                  existingUrls={[]}
                   onUploaded={(urls) => {
-                    setEditSchedAttachments([...editSchedAttachments, ...urls]);
-                    updateScheduleMutation.mutate({ id: editingSchedule.id, data: { attachments: JSON.stringify([...esAttachments, ...urls]) } });
-                    setEditingSchedule({ ...editingSchedule, attachments: JSON.stringify([...esAttachments, ...urls]) } as any);
+                    const merged = [...esAttachments, ...urls];
+                    updateScheduleMutation.mutate({ id: editingSchedule.id, data: { attachments: JSON.stringify(merged) } });
+                    setEditingSchedule({ ...editingSchedule, attachments: JSON.stringify(merged) } as any);
                   }} />
               </div>
               <div className="flex gap-2">
