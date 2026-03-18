@@ -905,10 +905,10 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
   const [newChangeAttachments, setNewChangeAttachments] = useState<string[]>([]);
   const [newCheckAttachments, setNewCheckAttachments] = useState<string[]>([]);
   // selectedChange removed - edit/delete now inline via pencil icon
-  const [showAllFloors, setShowAllFloors] = useState(false);
   const [designLightbox, setDesignLightbox] = useState<string | null>(null);
   const [editingCheck, setEditingCheck] = useState<DesignCheck | null>(null);
-  const [editingSlot, setEditingSlot] = useState<string | null>(null);
+  const [editingFloorPlans, setEditingFloorPlans] = useState(false);
+  const [editingElevations, setEditingElevations] = useState(false);
 
   const { data: allDesignChecks } = useQuery<DesignCheck[]>({ queryKey: [`/api/projects/${projectId}/design-checks`] });
   const designChecks = allDesignChecks?.filter((c) => (c as any).phase === "DESIGN" || !(c as any).phase) ?? [];
@@ -1005,82 +1005,70 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
   const elevationSlots = ["입면도-정면", "입면도-우측", "입면도-좌측", "입면도-배면", "입면도-대표"];
 
   const getSlotPhotos = (sub: string) => photos?.filter((p) => p.phase === "DESIGN" && (p as any).subCategory === sub) ?? [];
-  const visibleFloorSlots = showAllFloors ? floorSlots : floorSlots.slice(0, 5);
 
   return (
     <div className="space-y-6" data-testid="design-tab">
       {/* 평면도 (Floor Plans) */}
       <Card>
-        <CardHeader><CardTitle className="flex items-center gap-2"><Layers className="w-5 h-5" /> 평면도</CardTitle></CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="flex items-center gap-2"><Layers className="w-5 h-5" /> 평면도</CardTitle>
+          <Button size="sm" variant="outline" onClick={() => setEditingFloorPlans(true)}>
+            <Pencil className="w-3.5 h-3.5 mr-1" />수정
+          </Button>
+        </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {visibleFloorSlots.map((slot) => {
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {floorSlots.map((slot) => {
               const slotPhotos = getSlotPhotos(slot);
               const label = slot.replace("평면도-", "");
               return (
-                <div key={slot} className="space-y-2">
-                  <p className="text-sm font-semibold">{label}</p>
+                <div key={slot} className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground">{label}</p>
                   {slotPhotos.length > 0 ? (
-                    <div className="space-y-2">
-                      {slotPhotos.slice(0, 1).map((p) => (
-                        <button key={p.id} type="button" className="w-full aspect-[4/3] rounded-lg overflow-hidden border hover:opacity-90 transition-opacity"
-                          onClick={() => setDesignLightbox(p.imageUrl)}>
-                          <img src={p.imageUrl} alt={label} className="w-full h-full object-cover" />
-                        </button>
-                      ))}
-                      {slotPhotos.length > 1 && <p className="text-xs text-muted-foreground text-center">+{slotPhotos.length - 1}장 더</p>}
-                    </div>
+                    <button type="button" className="w-full aspect-[4/3] rounded-lg overflow-hidden border hover:opacity-90 transition-opacity"
+                      onClick={() => setDesignLightbox(slotPhotos[0].imageUrl)}>
+                      <img src={slotPhotos[0].imageUrl} alt={label} className="w-full h-full object-cover" />
+                    </button>
                   ) : (
                     <div className="aspect-[4/3] rounded-lg border-2 border-dashed border-muted flex items-center justify-center">
-                      <ImageIcon className="w-10 h-10 text-muted-foreground/30" />
+                      <ImageIcon className="w-6 h-6 text-muted-foreground/20" />
                     </div>
                   )}
-                  <Button variant="outline" size="sm" className="w-full text-xs" onClick={() => setEditingSlot(slot)}>
-                    <Pencil className="w-3 h-3 mr-1" />{slotPhotos.length > 0 ? `수정 (${slotPhotos.length}장)` : "사진 추가"}
-                  </Button>
+                  {slotPhotos.length > 1 && <p className="text-[10px] text-muted-foreground text-center">+{slotPhotos.length - 1}장</p>}
                 </div>
               );
             })}
           </div>
-          {floorSlots.length > 5 && (
-            <Button variant="ghost" size="sm" className="w-full mt-2 text-xs"
-              onClick={() => setShowAllFloors(!showAllFloors)}>
-              {showAllFloors ? "접기" : `나머지 ${floorSlots.length - 5}개 층 보기`}
-              {showAllFloors ? <ChevronDown className="w-3 h-3 ml-1" /> : <ChevronRight className="w-3 h-3 ml-1" />}
-            </Button>
-          )}
         </CardContent>
       </Card>
 
       {/* 입면도 (Elevations) */}
       <Card>
-        <CardHeader><CardTitle className="flex items-center gap-2"><Building2 className="w-5 h-5" /> 입면도</CardTitle></CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="flex items-center gap-2"><Building2 className="w-5 h-5" /> 입면도</CardTitle>
+          <Button size="sm" variant="outline" onClick={() => setEditingElevations(true)}>
+            <Pencil className="w-3.5 h-3.5 mr-1" />수정
+          </Button>
+        </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {elevationSlots.map((slot) => {
               const slotPhotos = getSlotPhotos(slot);
               const label = slot.replace("입면도-", "");
               return (
-                <div key={slot} className="space-y-2">
-                  <p className="text-sm font-semibold">{label}</p>
+                <div key={slot} className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground">{label}</p>
                   {slotPhotos.length > 0 ? (
-                    <div className="space-y-2">
-                      {slotPhotos.slice(0, 1).map((p) => (
-                        <button key={p.id} type="button" className="w-full aspect-[4/3] rounded-lg overflow-hidden border hover:opacity-90 transition-opacity"
-                          onClick={() => setDesignLightbox(p.imageUrl)}>
-                          <img src={p.imageUrl} alt={label} className="w-full h-full object-cover" />
-                        </button>
-                      ))}
-                      {slotPhotos.length > 1 && <p className="text-xs text-muted-foreground text-center">+{slotPhotos.length - 1}장 더</p>}
-                    </div>
+                    <button type="button" className="w-full aspect-[4/3] rounded-lg overflow-hidden border hover:opacity-90 transition-opacity"
+                      onClick={() => setDesignLightbox(slotPhotos[0].imageUrl)}>
+                      <img src={slotPhotos[0].imageUrl} alt={label} className="w-full h-full object-cover" />
+                    </button>
                   ) : (
                     <div className="aspect-[4/3] rounded-lg border-2 border-dashed border-muted flex items-center justify-center">
-                      <ImageIcon className="w-10 h-10 text-muted-foreground/30" />
+                      <ImageIcon className="w-6 h-6 text-muted-foreground/20" />
                     </div>
                   )}
-                  <Button variant="outline" size="sm" className="w-full text-xs" onClick={() => setEditingSlot(slot)}>
-                    <Pencil className="w-3 h-3 mr-1" />{slotPhotos.length > 0 ? `수정 (${slotPhotos.length}장)` : "사진 추가"}
-                  </Button>
+                  {slotPhotos.length > 1 && <p className="text-[10px] text-muted-foreground text-center">+{slotPhotos.length - 1}장</p>}
                 </div>
               );
             })}
@@ -1316,6 +1304,7 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
                     const newAtt = [...ecAttachments, ...urls];
                     updateChangeMutation.mutate({ id: editingChange.id, data: { attachments: JSON.stringify(newAtt) } });
                     setEditingChange({ ...editingChange, attachments: JSON.stringify(newAtt) } as any);
+                    toast({ title: "첨부파일 업로드 완료" });
                   }} />
               </div>
               <div className="flex gap-2">
@@ -1398,41 +1387,85 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
         );
       })()}
 
-      {editingSlot && (() => {
-        const slotPhotos = getSlotPhotos(editingSlot);
-        const slotLabel = editingSlot.replace("평면도-", "").replace("입면도-", "");
-        return (
-        <Dialog open onOpenChange={() => setEditingSlot(null)}>
-          <DialogContent className="max-h-[80vh] overflow-y-auto">
-            <DialogHeader><DialogTitle>{slotLabel} 사진 관리</DialogTitle></DialogHeader>
-            <div className="space-y-4">
-              {slotPhotos.length > 0 ? (
-                <div className="grid grid-cols-2 gap-2">
-                  {slotPhotos.map((p) => (
-                    <div key={p.id} className="relative group">
-                      <div className="aspect-[4/3] rounded-lg overflow-hidden border">
-                        <img src={p.imageUrl} alt="" className="w-full h-full object-cover" />
+      {/* 평면도 수정 모달 */}
+      {editingFloorPlans && (
+        <Dialog open onOpenChange={() => setEditingFloorPlans(false)}>
+          <DialogContent className="max-h-[85vh] overflow-y-auto max-w-2xl">
+            <DialogHeader><DialogTitle>평면도 관리</DialogTitle></DialogHeader>
+            <div className="space-y-6">
+              {floorSlots.map((slot) => {
+                const slotPhotos = getSlotPhotos(slot);
+                const label = slot.replace("평면도-", "");
+                return (
+                  <div key={slot} className="space-y-2">
+                    <h4 className="text-sm font-semibold border-b pb-1">{label}</h4>
+                    {slotPhotos.length > 0 && (
+                      <div className="grid grid-cols-3 gap-2">
+                        {slotPhotos.map((p) => (
+                          <div key={p.id} className="relative group">
+                            <div className="aspect-[4/3] rounded-lg overflow-hidden border">
+                              <img src={p.imageUrl} alt="" className="w-full h-full object-cover" />
+                            </div>
+                            <Button variant="destructive" size="icon"
+                              className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={() => { if (confirm("삭제하시겠습니까?")) deletePhotoMutation.mutate(p.id); }}>
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        ))}
                       </div>
-                      <Button variant="destructive" size="icon"
-                        className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={() => { if (confirm("이 사진을 삭제하시겠습니까?")) deletePhotoMutation.mutate(p.id); }}>
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground text-center py-4">등록된 사진이 없습니다</p>
-              )}
-              <FileDropZone projectId={projectId} phase="DESIGN" subCategory={editingSlot} acceptFiles
-                existingUrls={[]} onUploaded={() => queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/photos`] })}>
-                <span className="text-xs text-muted-foreground">사진/파일을 드래그하거나 붙여넣기 하세요</span>
-              </FileDropZone>
+                    )}
+                    <FileDropZone projectId={projectId} phase="DESIGN" subCategory={slot} acceptFiles
+                      existingUrls={[]} onUploaded={() => queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/photos`] })}>
+                      <span className="text-xs text-muted-foreground">드래그, 붙여넣기, 클릭으로 업로드</span>
+                    </FileDropZone>
+                  </div>
+                );
+              })}
             </div>
           </DialogContent>
         </Dialog>
-        );
-      })()}
+      )}
+
+      {/* 입면도 수정 모달 */}
+      {editingElevations && (
+        <Dialog open onOpenChange={() => setEditingElevations(false)}>
+          <DialogContent className="max-h-[85vh] overflow-y-auto max-w-2xl">
+            <DialogHeader><DialogTitle>입면도 관리</DialogTitle></DialogHeader>
+            <div className="space-y-6">
+              {elevationSlots.map((slot) => {
+                const slotPhotos = getSlotPhotos(slot);
+                const label = slot.replace("입면도-", "");
+                return (
+                  <div key={slot} className="space-y-2">
+                    <h4 className="text-sm font-semibold border-b pb-1">{label}</h4>
+                    {slotPhotos.length > 0 && (
+                      <div className="grid grid-cols-3 gap-2">
+                        {slotPhotos.map((p) => (
+                          <div key={p.id} className="relative group">
+                            <div className="aspect-[4/3] rounded-lg overflow-hidden border">
+                              <img src={p.imageUrl} alt="" className="w-full h-full object-cover" />
+                            </div>
+                            <Button variant="destructive" size="icon"
+                              className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={() => { if (confirm("삭제하시겠습니까?")) deletePhotoMutation.mutate(p.id); }}>
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <FileDropZone projectId={projectId} phase="DESIGN" subCategory={slot} acceptFiles
+                      existingUrls={[]} onUploaded={() => queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/photos`] })}>
+                      <span className="text-xs text-muted-foreground">드래그, 붙여넣기, 클릭으로 업로드</span>
+                    </FileDropZone>
+                  </div>
+                );
+              })}
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* 건축주 요청사항 (설계 단계) */}
       <RequestsSection projectId={projectId} phase="DESIGN" />

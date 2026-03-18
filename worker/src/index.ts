@@ -801,4 +801,44 @@ app.delete("/api/defects/:id", async (c) => {
   return c.json({ ok: true });
 });
 
+// --- Orphan Photo Cleanup ---
+app.post("/api/projects/:id/cleanup-orphan-photos", async (c) => {
+  const db = getDb(c);
+  const pid = c.req.param("id");
+
+  // Collect all attachment URLs from all entity tables
+  const referencedUrls = new Set<string>();
+  const tables = [
+    { tbl: schema.schedules, col: "attachments", filter: eq(schema.schedules.projectId, pid) },
+    { tbl: schema.dailyLogs, col: "attachments", filter: eq(schema.dailyLogs.projectId, pid) },
+    { tbl: schema.designChanges, col: "attachments", filter: eq(schema.designChanges.projectId, pid) },
+    { tbl: schema.designChecks, col: "attachments", filter: eq(schema.designChecks.projectId, pid) },
+    { tbl: schema.clientRequests, col: "attachments", filter: eq(schema.clientRequests.projectId, pid) },
+    { tbl: schema.inspections, col: "attachments", filter: eq(schema.inspections.projectId, pid) },
+    { tbl: schema.defects, col: "attachments", filter: eq(schema.defects.projectId, pid) },
+  ];
+  for (const { tbl, filter } of tables) {
+    const rows = await db.select().from(tbl).where(filter);
+    for (const row of rows) {
+      const att = (row as any).attachments;
+      if (att) { try { const urls = JSON.parse(att); if (Array.isArray(urls)) urls.forEach((u: string) => referencedUrls.add(u)); } catch {} }
+    }
+  }
+
+  // Get all photos for this project
+  const allPhotos = await db.select().from(schema.photos).where(eq(schema.photos.projectId, pid));
+
+  // Also keep photos that belong to design slots (평면도/입면도/공정사진 etc) — these are referenced by subCategory, not attachments
+  const orphans = allPhotos.filter((p) => !referencedUrls.has(p.imageUrl) && !p.subCategory);
+
+  let deleted = 0;
+  for (const orphan of orphans) {
+    await cleanupPhotoR2(c.env.R2_BUCKET, orphan.imageUrl);
+    await db.delete(schema.photos).where(eq(schema.photos.id, orphan.id));
+    deleted++;
+  }
+
+  return c.json({ ok: true, total: allPhotos.length, orphansDeleted: deleted, remaining: allPhotos.length - deleted });
+});
+
 export default app;
