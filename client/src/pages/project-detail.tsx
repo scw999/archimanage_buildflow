@@ -908,6 +908,7 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
   const [showAllFloors, setShowAllFloors] = useState(false);
   const [designLightbox, setDesignLightbox] = useState<string | null>(null);
   const [editingCheck, setEditingCheck] = useState<DesignCheck | null>(null);
+  const [editingSlot, setEditingSlot] = useState<string | null>(null);
 
   const { data: allDesignChecks } = useQuery<DesignCheck[]>({ queryKey: [`/api/projects/${projectId}/design-checks`] });
   const designChecks = allDesignChecks?.filter((c) => (c as any).phase === "DESIGN" || !(c as any).phase) ?? [];
@@ -941,7 +942,7 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
 
   const deleteCheckMutation = useMutation({
     mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/design-checks/${id}`); },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/design-checks`] }); toast({ title: "체크리스트 항목이 삭제되었습니다" }); setEditingCheck(null); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/design-checks`] }); queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/photos`] }); toast({ title: "체크리스트 항목이 삭제되었습니다" }); setEditingCheck(null); },
   });
 
   const changeMutation = useMutation({
@@ -969,7 +970,7 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
 
   const deleteChangeMutation = useMutation({
     mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/design-changes/${id}`); },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/design-changes`] }); toast({ title: "설계변경이 삭제되었습니다" }); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/design-changes`] }); queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/photos`] }); toast({ title: "설계변경이 삭제되었습니다" }); },
   });
 
   const deletePhotoMutation = useMutation({
@@ -1021,29 +1022,22 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
                   <p className="text-sm font-semibold">{label}</p>
                   {slotPhotos.length > 0 ? (
                     <div className="space-y-2">
-                      {slotPhotos.map((p) => (
-                        <div key={p.id} className="relative group">
-                          <button type="button" className="w-full aspect-[4/3] rounded-lg overflow-hidden border hover:opacity-90 transition-opacity"
-                            onClick={() => setDesignLightbox(p.imageUrl)}>
-                            <img src={p.imageUrl} alt={label} className="w-full h-full object-cover" />
-                          </button>
-                          <button type="button"
-                            className="absolute top-1 right-1 bg-black/60 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-xs hover:bg-red-600"
-                            onClick={() => { if (confirm("이 사진을 삭제하시겠습니까?")) deletePhotoMutation.mutate(p.id); }}>
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
+                      {slotPhotos.slice(0, 1).map((p) => (
+                        <button key={p.id} type="button" className="w-full aspect-[4/3] rounded-lg overflow-hidden border hover:opacity-90 transition-opacity"
+                          onClick={() => setDesignLightbox(p.imageUrl)}>
+                          <img src={p.imageUrl} alt={label} className="w-full h-full object-cover" />
+                        </button>
                       ))}
+                      {slotPhotos.length > 1 && <p className="text-xs text-muted-foreground text-center">+{slotPhotos.length - 1}장 더</p>}
                     </div>
                   ) : (
                     <div className="aspect-[4/3] rounded-lg border-2 border-dashed border-muted flex items-center justify-center">
                       <ImageIcon className="w-10 h-10 text-muted-foreground/30" />
                     </div>
                   )}
-                  <FileDropZone projectId={projectId} phase="DESIGN" subCategory={slot} acceptFiles
-                    existingUrls={[]} onUploaded={() => queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/photos`] })}>
-                    <span className="text-xs text-muted-foreground">사진/파일 추가</span>
-                  </FileDropZone>
+                  <Button variant="outline" size="sm" className="w-full text-xs" onClick={() => setEditingSlot(slot)}>
+                    <Pencil className="w-3 h-3 mr-1" />{slotPhotos.length > 0 ? `수정 (${slotPhotos.length}장)` : "사진 추가"}
+                  </Button>
                 </div>
               );
             })}
@@ -1071,29 +1065,22 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
                   <p className="text-sm font-semibold">{label}</p>
                   {slotPhotos.length > 0 ? (
                     <div className="space-y-2">
-                      {slotPhotos.map((p) => (
-                        <div key={p.id} className="relative group">
-                          <button type="button" className="w-full aspect-[4/3] rounded-lg overflow-hidden border hover:opacity-90 transition-opacity"
-                            onClick={() => setDesignLightbox(p.imageUrl)}>
-                            <img src={p.imageUrl} alt={label} className="w-full h-full object-cover" />
-                          </button>
-                          <button type="button"
-                            className="absolute top-1 right-1 bg-black/60 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-xs hover:bg-red-600"
-                            onClick={() => { if (confirm("이 사진을 삭제하시겠습니까?")) deletePhotoMutation.mutate(p.id); }}>
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
+                      {slotPhotos.slice(0, 1).map((p) => (
+                        <button key={p.id} type="button" className="w-full aspect-[4/3] rounded-lg overflow-hidden border hover:opacity-90 transition-opacity"
+                          onClick={() => setDesignLightbox(p.imageUrl)}>
+                          <img src={p.imageUrl} alt={label} className="w-full h-full object-cover" />
+                        </button>
                       ))}
+                      {slotPhotos.length > 1 && <p className="text-xs text-muted-foreground text-center">+{slotPhotos.length - 1}장 더</p>}
                     </div>
                   ) : (
                     <div className="aspect-[4/3] rounded-lg border-2 border-dashed border-muted flex items-center justify-center">
                       <ImageIcon className="w-10 h-10 text-muted-foreground/30" />
                     </div>
                   )}
-                  <FileDropZone projectId={projectId} phase="DESIGN" subCategory={slot} acceptFiles
-                    existingUrls={[]} onUploaded={() => queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/photos`] })}>
-                    <span className="text-xs text-muted-foreground">사진/파일 추가</span>
-                  </FileDropZone>
+                  <Button variant="outline" size="sm" className="w-full text-xs" onClick={() => setEditingSlot(slot)}>
+                    <Pencil className="w-3 h-3 mr-1" />{slotPhotos.length > 0 ? `수정 (${slotPhotos.length}장)` : "사진 추가"}
+                  </Button>
                 </div>
               );
             })}
@@ -1232,9 +1219,10 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
                 <div className="space-y-2"><Label>영향 범위</Label><Input name="impactArea" placeholder="예: 1층 거실, 외부 마감" /></div>
                 <div className="space-y-2">
                   <Label>첨부파일</Label>
+                  {newChangeAttachments.length > 0 && <AttachmentPreviewGrid attachments={newChangeAttachments} />}
                   <FileDropZone projectId={projectId} phase="DESIGN" subCategory="설계변경첨부" acceptFiles
-                    existingUrls={newChangeAttachments}
-                    onUploaded={(urls) => setNewChangeAttachments(urls)} />
+                    existingUrls={[]}
+                    onUploaded={(urls) => setNewChangeAttachments([...newChangeAttachments, ...urls])} />
                 </div>
                 <Button type="submit" disabled={changeMutation.isPending}>등록</Button>
               </form>
@@ -1410,6 +1398,42 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
         );
       })()}
 
+      {editingSlot && (() => {
+        const slotPhotos = getSlotPhotos(editingSlot);
+        const slotLabel = editingSlot.replace("평면도-", "").replace("입면도-", "");
+        return (
+        <Dialog open onOpenChange={() => setEditingSlot(null)}>
+          <DialogContent className="max-h-[80vh] overflow-y-auto">
+            <DialogHeader><DialogTitle>{slotLabel} 사진 관리</DialogTitle></DialogHeader>
+            <div className="space-y-4">
+              {slotPhotos.length > 0 ? (
+                <div className="grid grid-cols-2 gap-2">
+                  {slotPhotos.map((p) => (
+                    <div key={p.id} className="relative group">
+                      <div className="aspect-[4/3] rounded-lg overflow-hidden border">
+                        <img src={p.imageUrl} alt="" className="w-full h-full object-cover" />
+                      </div>
+                      <Button variant="destructive" size="icon"
+                        className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => { if (confirm("이 사진을 삭제하시겠습니까?")) deletePhotoMutation.mutate(p.id); }}>
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-4">등록된 사진이 없습니다</p>
+              )}
+              <FileDropZone projectId={projectId} phase="DESIGN" subCategory={editingSlot} acceptFiles
+                existingUrls={[]} onUploaded={() => queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/photos`] })}>
+                <span className="text-xs text-muted-foreground">사진/파일을 드래그하거나 붙여넣기 하세요</span>
+              </FileDropZone>
+            </div>
+          </DialogContent>
+        </Dialog>
+        );
+      })()}
+
       {/* 건축주 요청사항 (설계 단계) */}
       <RequestsSection projectId={projectId} phase="DESIGN" />
 
@@ -1458,7 +1482,7 @@ function RequestsSection({ projectId, phase }: { projectId: string; phase: strin
 
   const deleteRequestMutation = useMutation({
     mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/requests/${id}`); },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/requests`] }); toast({ title: "요청사항이 삭제되었습니다" }); setExpandedReq(null); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/requests`] }); queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/photos`] }); toast({ title: "요청사항이 삭제되었습니다" }); setExpandedReq(null); },
   });
 
   const commentMutation = useMutation({
@@ -1966,7 +1990,7 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
 
   const deleteDefectMutation = useMutation({
     mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/defects/${id}`); },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/defects`] }); toast({ title: "하자가 삭제되었습니다" }); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/defects`] }); queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/photos`] }); toast({ title: "하자가 삭제되었습니다" }); },
   });
 
   const [editingDefect, setEditingDefect] = useState<Defect | null>(null);
@@ -1978,7 +2002,7 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
 
   const deleteInspMutation = useMutation({
     mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/inspections/${id}`); },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/inspections`] }); toast({ title: "검수가 삭제되었습니다" }); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/inspections`] }); queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/photos`] }); toast({ title: "검수가 삭제되었습니다" }); },
   });
 
   const sortedTasks = tasks ? [...tasks].sort((a, b) => a.sortOrder - b.sortOrder) : [];
@@ -2699,12 +2723,12 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
 
   const deleteScheduleMutation = useMutation({
     mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/schedules/${id}`); },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/schedules`] }); toast({ title: "일정이 삭제되었습니다" }); setEditingSchedule(null); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/schedules`] }); queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/photos`] }); toast({ title: "일정이 삭제되었습니다" }); setEditingSchedule(null); },
   });
 
   const deleteLogMutation = useMutation({
     mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/daily-logs/${id}`); },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/daily-logs`] }); toast({ title: "작업일지가 삭제되었습니다" }); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/daily-logs`] }); queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/photos`] }); toast({ title: "작업일지가 삭제되었습니다" }); },
   });
 
   const [editingLog, setEditingLog] = useState<DailyLog | null>(null);
