@@ -22,6 +22,18 @@ const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 // CORS
 app.use("*", cors({ origin: "*", allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"], allowHeaders: ["Content-Type", "Authorization"] }));
 
+// Auto-migrate: ensure attachments columns exist (safe - ALTER TABLE fails silently if column exists)
+let migrated = false;
+app.use("*", async (c, next) => {
+  if (!migrated) {
+    migrated = true;
+    const raw = c.env.DB;
+    try { await raw.prepare("ALTER TABLE inspections ADD COLUMN attachments TEXT").run(); } catch { /* already exists */ }
+    try { await raw.prepare("ALTER TABLE defects ADD COLUMN attachments TEXT").run(); } catch { /* already exists */ }
+  }
+  await next();
+});
+
 // --- JWT helpers (manual, no Node.js crypto dependency) ---
 function base64url(str: string): string {
   return btoa(str).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
