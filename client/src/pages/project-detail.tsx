@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -890,7 +891,7 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
   const { toast } = useToast();
   const [checkDialogOpen, setCheckDialogOpen] = useState(false);
   const [changeDialogOpen, setChangeDialogOpen] = useState(false);
-  const [selectedChange, setSelectedChange] = useState<DesignChange | null>(null);
+  // selectedChange removed - edit/delete now inline via pencil icon
   const [showAllFloors, setShowAllFloors] = useState(false);
   const [designLightbox, setDesignLightbox] = useState<string | null>(null);
   const [editingCheck, setEditingCheck] = useState<DesignCheck | null>(null);
@@ -1122,30 +1123,33 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
                   <div className="space-y-2">
                     {items.map((item) => {
                       const itemAttachments: string[] = (item as any).attachments ? JSON.parse((item as any).attachments) : [];
+                      const isCompleted = item.isCompleted === 1;
                       return (
                       <div key={item.id} className="p-3 rounded-lg border hover:bg-muted/30">
                         <div className="flex items-start gap-3">
-                          <input type="checkbox" checked={item.isCompleted === 1}
-                            onChange={() => toggleCheckMutation.mutate({ id: item.id, isCompleted: item.isCompleted === 1 ? 0 : 1 })}
+                          <input type="checkbox" checked={isCompleted}
+                            onChange={() => toggleCheckMutation.mutate({ id: item.id, isCompleted: isCompleted ? 0 : 1 })}
                             className="w-4 h-4 rounded border-gray-300 mt-0.5 shrink-0" />
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
-                              <span className={`text-sm font-medium ${item.isCompleted === 1 ? "line-through text-muted-foreground" : ""}`}>{item.title}</span>
+                              <span className={`text-sm font-medium ${isCompleted ? "line-through text-muted-foreground" : ""}`}>{item.title}</span>
                               {(item as any).linkedToConstruction === 1 && <Badge variant="outline" className="text-xs px-1.5">시공연동</Badge>}
                               {itemAttachments.length > 0 && <span className="text-xs text-muted-foreground"><Camera className="w-3 h-3 inline" /> {itemAttachments.length}</span>}
                               <Button variant="ghost" size="icon" className="h-6 w-6 ml-auto shrink-0" onClick={() => setEditingCheck(item)}>
                                 <Pencil className="w-3 h-3" />
                               </Button>
                             </div>
-                            {item.memo && <p className="text-sm text-muted-foreground mt-1">{item.memo}</p>}
-                            {itemAttachments.length > 0 && (
-                              <div className="mt-2">
-                                <AttachmentPreviewGrid attachments={itemAttachments} />
-                              </div>
+                            {/* 완료되지 않은 항목만 상세내용 표시 */}
+                            {!isCompleted && (
+                              <>
+                                {item.memo && <p className="text-sm text-muted-foreground mt-1">{item.memo}</p>}
+                                {itemAttachments.length > 0 && (
+                                  <div className="mt-2">
+                                    <AttachmentPreviewGrid attachments={itemAttachments} />
+                                  </div>
+                                )}
+                              </>
                             )}
-                            <ImageDropZone projectId={projectId} phase="DESIGN" subCategory="체크리스트첨부"
-                              existingUrls={[]}
-                              onUploaded={(urls) => toggleCheckMutation.mutate({ id: item.id, attachments: JSON.stringify([...itemAttachments, ...urls]) })} />
                           </div>
                         </div>
                       </div>
@@ -1191,63 +1195,54 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
             <p className="text-sm text-muted-foreground text-center py-4">설계변경 이력이 없습니다</p>
           ) : (
             <div className="space-y-3">
-              {designChanges.map((dc) => (
-                <div key={dc.id} className="p-3 rounded-lg border cursor-pointer hover:border-primary/50 transition-colors"
-                  onClick={() => setSelectedChange(dc)}>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-medium">{dc.title}</span>
-                    <Badge variant="outline" className={getDesignChangeStatusColor(dc.status)}>{getDesignChangeStatusLabel(dc.status)}</Badge>
+              {designChanges.map((dc) => {
+                const dcAttachments: string[] = (dc as any).attachments ? JSON.parse((dc as any).attachments) : [];
+                return (
+                <div key={dc.id} className="p-3 rounded-lg border">
+                  <div className="flex items-start gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-medium">{dc.title}</span>
+                        <Badge variant="outline" className={getDesignChangeStatusColor(dc.status)}>{getDesignChangeStatusLabel(dc.status)}</Badge>
+                        {dcAttachments.length > 0 && <span className="text-xs text-muted-foreground"><Camera className="w-3 h-3 inline" /> {dcAttachments.length}</span>}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">{dc.description}</p>
+                      {dc.impactArea && <p className="text-xs text-muted-foreground mt-0.5">영향 범위: {dc.impactArea}</p>}
+                      {dc.reason && <p className="text-xs text-muted-foreground mt-0.5">사유: {dc.reason}</p>}
+                      {dcAttachments.length > 0 && (
+                        <div className="mt-2"><AttachmentPreviewGrid attachments={dcAttachments} /></div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <select value={dc.status}
+                        onChange={(e) => { changeStatusMutation.mutate({ id: dc.id, status: e.target.value }); }}
+                        className="rounded-md border border-input bg-background px-1.5 py-0.5 text-xs h-7">
+                        <option value="REQUESTED">요청</option><option value="REVIEWING">검토중</option>
+                        <option value="APPROVED">승인</option><option value="REJECTED">반려</option><option value="APPLIED">적용완료</option>
+                      </select>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditingChange(dc)}>
+                        <Pencil className="w-3.5 h-3.5" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive"
+                        onClick={() => { if (confirm("이 설계변경을 삭제하시겠습니까?")) deleteChangeMutation.mutate(dc.id); }}>
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{dc.description}</p>
-                  {dc.impactArea && <p className="text-xs text-muted-foreground mt-0.5">영향 범위: {dc.impactArea}</p>}
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>
       </Card>
 
-      {selectedChange && (() => {
-        const scAttachments: string[] = (selectedChange as any).attachments ? JSON.parse((selectedChange as any).attachments) : [];
-        return (
-        <Dialog open onOpenChange={() => setSelectedChange(null)}>
-          <DialogContent>
-            <DialogHeader><DialogTitle>{selectedChange.title}</DialogTitle></DialogHeader>
-            <div className="space-y-3">
-              <Badge variant="outline" className={getDesignChangeStatusColor(selectedChange.status)}>{getDesignChangeStatusLabel(selectedChange.status)}</Badge>
-              <p className="text-sm">{selectedChange.description}</p>
-              {selectedChange.reason && <p className="text-sm"><strong>사유:</strong> {selectedChange.reason}</p>}
-              {selectedChange.impactArea && <p className="text-sm"><strong>영향 범위:</strong> {selectedChange.impactArea}</p>}
-              {scAttachments.length > 0 && <AttachmentPreviewGrid attachments={scAttachments} />}
-              <FileDropZone projectId={projectId} phase="DESIGN" subCategory="설계변경첨부" acceptFiles
-                existingUrls={[]}
-                onUploaded={(urls) => updateChangeMutation.mutate({ id: selectedChange.id, data: { attachments: JSON.stringify([...scAttachments, ...urls]) } })} />
-              <div className="flex items-center gap-2">
-                <Label className="text-xs">상태 변경:</Label>
-                <select value={selectedChange.status}
-                  onChange={(e) => { changeStatusMutation.mutate({ id: selectedChange.id, status: e.target.value }); setSelectedChange({ ...selectedChange, status: e.target.value as any }); }}
-                  className="rounded-md border border-input bg-background px-2 py-1 text-xs">
-                  <option value="REQUESTED">요청</option><option value="REVIEWING">검토중</option>
-                  <option value="APPROVED">승인</option><option value="REJECTED">반려</option><option value="APPLIED">적용완료</option>
-                </select>
-              </div>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => { setEditingChange(selectedChange); setSelectedChange(null); }}>
-                  <Pencil className="w-3 h-3 mr-1" />수정
-                </Button>
-                <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:text-destructive"
-                  onClick={() => { if (confirm("이 설계변경을 삭제하시겠습니까?")) deleteChangeMutation.mutate(selectedChange.id); }}>
-                  <Trash2 className="w-3 h-3 mr-1" />삭제
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-        );
-      })()}
+      {/* selectedChange dialog removed - edit/delete now inline via pencil icon */}
 
       {/* 설계변경 수정 다이얼로그 */}
-      {editingChange && (
+      {editingChange && (() => {
+        const ecAttachments: string[] = (editingChange as any).attachments ? JSON.parse((editingChange as any).attachments) : [];
+        return (
         <Dialog open onOpenChange={() => setEditingChange(null)}>
           <DialogContent>
             <DialogHeader><DialogTitle>설계변경 수정</DialogTitle></DialogHeader>
@@ -1267,11 +1262,27 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
               <div className="space-y-2"><Label>설명</Label><Textarea name="description" required defaultValue={editingChange.description} /></div>
               <div className="space-y-2"><Label>변경 사유</Label><Input name="reason" defaultValue={editingChange.reason || ""} /></div>
               <div className="space-y-2"><Label>영향 범위</Label><Input name="impactArea" defaultValue={editingChange.impactArea || ""} /></div>
-              <Button type="submit" className="w-full">저장</Button>
+              <div className="space-y-2">
+                <Label>첨부파일</Label>
+                {ecAttachments.length > 0 && (
+                  <AttachmentDisplay urls={ecAttachments} onRemove={(idx) => {
+                    const next = ecAttachments.filter((_, i) => i !== idx);
+                    updateChangeMutation.mutate({ id: editingChange.id, data: { attachments: JSON.stringify(next) } });
+                  }} compact />
+                )}
+                <FileDropZone projectId={projectId} phase="DESIGN" subCategory="설계변경첨부" acceptFiles
+                  existingUrls={[]}
+                  onUploaded={(urls) => updateChangeMutation.mutate({ id: editingChange.id, data: { attachments: JSON.stringify([...ecAttachments, ...urls]) } })} />
+              </div>
+              <div className="flex gap-2">
+                <Button type="submit" className="flex-1">저장</Button>
+                <Button type="button" variant="destructive" onClick={() => { if (confirm("이 설계변경을 삭제하시겠습니까?")) { deleteChangeMutation.mutate(editingChange.id); setEditingChange(null); } }}>삭제</Button>
+              </div>
             </form>
           </DialogContent>
         </Dialog>
-      )}
+        );
+      })()}
 
       {/* 도면 관리 */}
       <Card>
@@ -1303,7 +1314,9 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
       </Card>
 
       {/* 체크리스트 수정 다이얼로그 */}
-      {editingCheck && (
+      {editingCheck && (() => {
+        const ecAttachments: string[] = (editingCheck as any).attachments ? JSON.parse((editingCheck as any).attachments) : [];
+        return (
         <Dialog open onOpenChange={() => setEditingCheck(null)}>
           <DialogContent>
             <DialogHeader><DialogTitle>체크리스트 항목 수정</DialogTitle></DialogHeader>
@@ -1314,11 +1327,24 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
             }} className="space-y-4">
               <div className="space-y-2"><Label>항목명</Label><Input name="title" required defaultValue={editingCheck.title} /></div>
               <div className="space-y-2"><Label>메모</Label><Textarea name="memo" defaultValue={editingCheck.memo || ""} /></div>
+              <div className="space-y-2">
+                <Label>첨부파일</Label>
+                {ecAttachments.length > 0 && (
+                  <AttachmentDisplay urls={ecAttachments} onRemove={(idx) => {
+                    const next = ecAttachments.filter((_, i) => i !== idx);
+                    toggleCheckMutation.mutate({ id: editingCheck.id, attachments: JSON.stringify(next) });
+                  }} compact />
+                )}
+                <FileDropZone projectId={projectId} phase="DESIGN" subCategory="체크리스트첨부" acceptFiles
+                  existingUrls={[]}
+                  onUploaded={(urls) => toggleCheckMutation.mutate({ id: editingCheck.id, attachments: JSON.stringify([...ecAttachments, ...urls]) })} />
+              </div>
               <Button type="submit" className="w-full">저장</Button>
             </form>
           </DialogContent>
         </Dialog>
-      )}
+        );
+      })()}
 
       {/* 건축주 요청사항 (설계 단계) */}
       <RequestsSection projectId={projectId} phase="DESIGN" />
@@ -1344,7 +1370,6 @@ function RequestsSection({ projectId, phase }: { projectId: string; phase: strin
   const { user } = useAuth();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [expandedReq, setExpandedReq] = useState<string | null>(null);
-  const [uploadingReq, setUploadingReq] = useState(false);
   const [editingReq, setEditingReq] = useState<ClientRequest | null>(null);
   const [newReqAttachments, setNewReqAttachments] = useState<string[]>([]);
   const isAdmin = user?.role === "SUPER_ADMIN";
@@ -1378,45 +1403,6 @@ function RequestsSection({ projectId, phase }: { projectId: string; phase: strin
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/requests/${expandedReq}/comments`] }); },
   });
-
-  // File upload for request attachments
-  const handleReqFileUpload = async (reqId: string, files: FileList) => {
-    setUploadingReq(true);
-    try {
-      const fd = new FormData();
-      for (const f of Array.from(files)) fd.append("photos", f);
-      fd.append("phase", phase);
-      fd.append("subCategory", "요청첨부");
-      const res = await fetch(`${API_BASE}/api/projects/${projectId}/photos/upload`, {
-        method: "POST", headers: { Authorization: `Bearer ${getAuthToken()}` }, body: fd,
-      });
-      if (!res.ok) throw new Error("업로드 실패");
-      const uploaded = await res.json();
-      const urls = uploaded.map((p: any) => p.imageUrl);
-      const req = requests.find((r) => r.id === reqId);
-      const existing = (req as any)?.attachments ? JSON.parse((req as any).attachments) : [];
-      updateRequestMutation.mutate({ id: reqId, data: { attachments: JSON.stringify([...existing, ...urls]) } });
-      toast({ title: "파일이 첨부되었습니다" });
-    } catch { toast({ title: "업로드 실패", variant: "destructive" }); }
-    finally { setUploadingReq(false); }
-  };
-
-  // Paste handler for requests - supports multiple images
-  const handleReqPaste = async (e: React.ClipboardEvent, reqId: string) => {
-    const items = e.clipboardData?.items;
-    if (!items) return;
-    const dt = new DataTransfer();
-    for (const item of Array.from(items)) {
-      if (item.type.startsWith("image/")) {
-        e.preventDefault();
-        const file = item.getAsFile();
-        if (file && dt.items.length < 10) dt.items.add(file);
-      }
-    }
-    if (dt.files.length > 0) {
-      await handleReqFileUpload(reqId, dt.files);
-    }
-  };
 
   const resolved = requests.filter((r) => r.status === "RESOLVED").length;
   const phaseLabel = phase === "DESIGN" ? "설계" : phase === "CONSTRUCTION" ? "시공" : getPhaseLabel(phase);
@@ -1475,59 +1461,49 @@ function RequestsSection({ projectId, phase }: { projectId: string; phase: strin
               const attachments: string[] = (req as any).attachments ? JSON.parse((req as any).attachments) : [];
               return (
                 <div key={req.id} className="p-3 rounded-lg border">
-                  <div className="cursor-pointer" onClick={() => setExpandedReq(expandedReq === req.id ? null : req.id)}>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {expandedReq === req.id ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                      <span className="text-sm font-medium">{req.title}</span>
-                      <Badge variant="outline" className={getRequestStatusColor(req.status)}>{getRequestStatusLabel(req.status)}</Badge>
-                      <Badge variant="outline" className="text-xs">{getRequestPriorityLabel(req.priority)}</Badge>
-                      {attachments.length > 0 && <span className="text-xs text-muted-foreground"><Camera className="w-3 h-3 inline" /> {attachments.length}</span>}
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1 line-clamp-1 ml-6">{req.content}</p>
-                  </div>
-                  {/* Inline attachment thumbnails when collapsed */}
-                  {expandedReq !== req.id && attachments.length > 0 && (
-                    <div className="ml-6 mt-2" onClick={(e) => e.stopPropagation()}>
-                      <AttachmentPreviewGrid attachments={attachments} />
-                    </div>
-                  )}
-                  {expandedReq === req.id && (
-                    <div className="mt-3 pt-3 border-t space-y-3 ml-6">
-                      <p className="text-sm">{req.content}</p>
-                      {/* 첨부 이미지/파일 표시 */}
-                      {attachments.length > 0 && <AttachmentPreviewGrid attachments={attachments} />}
-                      {/* 새 파일 업로드 */}
-                      <FileDropZone projectId={projectId} phase={phase} subCategory="요청첨부" acceptFiles
-                        existingUrls={[]}
-                        onUploaded={(urls) => updateRequestMutation.mutate({ id: req.id, data: { attachments: JSON.stringify([...attachments, ...urls]) } })} />
+                  <div className="flex items-start gap-2">
+                    <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        {isPM && (
-                          <>
-                            <Label className="text-xs">상태:</Label>
-                            <select value={req.status} onChange={(e) => updateRequestMutation.mutate({ id: req.id, data: { status: e.target.value } })}
-                              className="rounded-md border border-input bg-background px-2 py-1 text-xs">
-                              <option value="NEW">신규</option><option value="REVIEWING">검토중</option><option value="IN_PROGRESS">진행중</option>
-                              <option value="RESOLVED">해결</option><option value="ON_HOLD">보류</option><option value="REJECTED">반려</option>
-                            </select>
-                          </>
-                        )}
+                        <span className="text-sm font-medium">{req.title}</span>
+                        <Badge variant="outline" className={getRequestStatusColor(req.status)}>{getRequestStatusLabel(req.status)}</Badge>
+                        <Badge variant="outline" className="text-xs">{getRequestPriorityLabel(req.priority)}</Badge>
+                        {attachments.length > 0 && <span className="text-xs text-muted-foreground"><Camera className="w-3 h-3 inline" /> {attachments.length}</span>}
                       </div>
-                      {/* 수정/삭제 버튼 */}
-                      <div className="flex items-center gap-2">
-                        {(isPM || req.createdBy === user?.id) && (
-                          <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setEditingReq(req)}>
-                            <Pencil className="w-3 h-3 mr-1" />수정
-                          </Button>
-                        )}
-                        {(isAdmin || req.createdBy === user?.id) && (
-                          <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:text-destructive"
-                            onClick={() => { if (confirm("이 요청사항을 삭제하시겠습니까?")) deleteRequestMutation.mutate(req.id); }}>
-                            <Trash2 className="w-3 h-3 mr-1" />삭제
-                          </Button>
-                        )}
-                      </div>
-                      <div className="space-y-2">
-                        <p className="text-xs font-semibold">댓글</p>
+                      <p className="text-xs text-muted-foreground mt-1">{req.content}</p>
+                      {attachments.length > 0 && (
+                        <div className="mt-2"><AttachmentPreviewGrid attachments={attachments} /></div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      {isPM && (
+                        <select value={req.status} onChange={(e) => updateRequestMutation.mutate({ id: req.id, data: { status: e.target.value } })}
+                          className="rounded-md border border-input bg-background px-1.5 py-0.5 text-xs h-7">
+                          <option value="NEW">신규</option><option value="REVIEWING">검토중</option><option value="IN_PROGRESS">진행중</option>
+                          <option value="RESOLVED">해결</option><option value="ON_HOLD">보류</option><option value="REJECTED">반려</option>
+                        </select>
+                      )}
+                      {(isPM || req.createdBy === user?.id) && (
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditingReq(req)}>
+                          <Pencil className="w-3.5 h-3.5" />
+                        </Button>
+                      )}
+                      {(isAdmin || req.createdBy === user?.id) && (
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive"
+                          onClick={() => { if (confirm("이 요청사항을 삭제하시겠습니까?")) deleteRequestMutation.mutate(req.id); }}>
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                  {/* 댓글 토글 */}
+                  <div className="mt-2">
+                    <button className="text-xs text-primary hover:underline flex items-center gap-1"
+                      onClick={() => setExpandedReq(expandedReq === req.id ? null : req.id)}>
+                      <MessageSquare className="w-3 h-3" />
+                      댓글 {expandedReq === req.id ? "접기" : "보기"}
+                    </button>
+                    {expandedReq === req.id && (
+                      <div className="mt-2 space-y-2">
                         {comments?.map((c) => (
                           <div key={c.id} className="p-2 bg-muted/50 rounded text-xs">{c.content}</div>
                         ))}
@@ -1540,8 +1516,8 @@ function RequestsSection({ projectId, phase }: { projectId: string; phase: strin
                           <Button type="submit" size="sm" className="h-8">등록</Button>
                         </form>
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -1549,7 +1525,9 @@ function RequestsSection({ projectId, phase }: { projectId: string; phase: strin
         )}
       </CardContent>
       {/* 요청사항 수정 다이얼로그 */}
-      {editingReq && (
+      {editingReq && (() => {
+        const erAttachments: string[] = (editingReq as any).attachments ? JSON.parse((editingReq as any).attachments) : [];
+        return (
         <Dialog open onOpenChange={() => setEditingReq(null)}>
           <DialogContent>
             <DialogHeader><DialogTitle>요청사항 수정</DialogTitle></DialogHeader>
@@ -1582,11 +1560,27 @@ function RequestsSection({ projectId, phase }: { projectId: string; phase: strin
                   </select>
                 </div>
               </div>
-              <Button type="submit" className="w-full">저장</Button>
+              <div className="space-y-2">
+                <Label>첨부파일</Label>
+                {erAttachments.length > 0 && (
+                  <AttachmentDisplay urls={erAttachments} onRemove={(idx) => {
+                    const next = erAttachments.filter((_, i) => i !== idx);
+                    updateRequestMutation.mutate({ id: editingReq.id, data: { attachments: JSON.stringify(next) } });
+                  }} compact />
+                )}
+                <FileDropZone projectId={projectId} phase={phase} subCategory="요청첨부" acceptFiles
+                  existingUrls={[]}
+                  onUploaded={(urls) => updateRequestMutation.mutate({ id: editingReq.id, data: { attachments: JSON.stringify([...erAttachments, ...urls]) } })} />
+              </div>
+              <div className="flex gap-2">
+                <Button type="submit" className="flex-1">저장</Button>
+                <Button type="button" variant="destructive" onClick={() => { if (confirm("이 요청사항을 삭제하시겠습니까?")) { deleteRequestMutation.mutate(editingReq.id); setEditingReq(null); } }}>삭제</Button>
+              </div>
             </form>
           </DialogContent>
         </Dialog>
-      )}
+        );
+      })()}
     </Card>
   );
 }
@@ -1659,16 +1653,26 @@ function SortableTaskItem({ task, isExpanded, onToggle, progress, onProgressChan
               <span className="text-xs font-medium w-10 text-right">{progress}%</span>
             </div>
             {(task.startDate || task.endDate) && <p className="text-xs text-muted-foreground mt-1">{task.startDate} ~ {task.endDate}</p>}
-            {/* 축소 상태에서도 사진 미리보기 */}
-            {!isExpanded && taskPhotos.length > 0 && (
-              <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5 mt-2">
-                {taskPhotos.slice(0, 15).map((ph) => (
-                  <div key={ph.id} className="aspect-square rounded-lg overflow-hidden border">
-                    <img src={ph.imageUrl} alt="" className="w-full h-full object-cover" />
+            {/* 축소 상태에서도 메모, 체크리스트, 사진 표시 */}
+            {!isExpanded && (
+              <>
+                {t.memo && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{t.memo}</p>}
+                {checklistItems.length > 0 && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    <ClipboardList className="w-3 h-3 inline mr-1" />체크리스트 {checklistItems.length}개
+                  </p>
+                )}
+                {taskPhotos.length > 0 && (
+                  <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5 mt-2">
+                    {taskPhotos.slice(0, 15).map((ph) => (
+                      <div key={ph.id} className="aspect-square rounded-lg overflow-hidden border">
+                        <img src={ph.imageUrl} alt="" className="w-full h-full object-cover" />
+                      </div>
+                    ))}
+                    {taskPhotos.length > 15 && <div className="aspect-square rounded-lg border flex items-center justify-center text-sm font-medium text-muted-foreground">+{taskPhotos.length - 15}</div>}
                   </div>
-                ))}
-                {taskPhotos.length > 15 && <div className="aspect-square rounded-lg border flex items-center justify-center text-sm font-medium text-muted-foreground">+{taskPhotos.length - 15}</div>}
-              </div>
+                )}
+              </>
             )}
           </div>
           {isExpanded && (
@@ -1764,8 +1768,7 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
   const [defectDialogOpen, setDefectDialogOpen] = useState(false);
   const [checkDialogOpen, setCheckDialogOpen] = useState(false);
   const [expandedTask, setExpandedTask] = useState<string | null>(null);
-  const [expandedInsp, setExpandedInsp] = useState<string | null>(null);
-  const [expandedDefect, setExpandedDefect] = useState<string | null>(null);
+  // expandedInsp/expandedDefect removed - edit/delete via pencil icon
   const [localProgress, setLocalProgress] = useState<Record<string, number>>({});
   const [editTask, setEditTask] = useState<ConstructionTask | null>(null);
   const [reorderMode, setReorderMode] = useState(false);
@@ -1870,6 +1873,13 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
   });
 
   const [editingDefect, setEditingDefect] = useState<Defect | null>(null);
+  const [editingCheck, setEditingCheck] = useState<DesignCheck | null>(null);
+  const [editingInsp, setEditingInsp] = useState<Inspection | null>(null);
+
+  const deleteInspMutation = useMutation({
+    mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/inspections/${id}`); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/inspections`] }); toast({ title: "검수가 삭제되었습니다" }); },
+  });
 
   const sortedTasks = tasks ? [...tasks].sort((a, b) => a.sortOrder - b.sortOrder) : [];
   const constructionChecks = designChecks?.filter((c) => (c as any).phase === "CONSTRUCTION") ?? [];
@@ -2017,27 +2027,33 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
               <div className="space-y-2">
                 {constructionChecks.map((item) => {
                   const cAttachments: string[] = (item as any).attachments ? JSON.parse((item as any).attachments) : [];
+                  const isCompleted = item.isCompleted === 1;
                   return (
                   <div key={item.id} className="p-3 rounded-lg border hover:bg-muted/30">
                     <div className="flex items-start gap-3">
-                      <input type="checkbox" checked={item.isCompleted === 1}
-                        onChange={() => toggleCheckMutation.mutate({ id: item.id, isCompleted: item.isCompleted === 1 ? 0 : 1 })}
+                      <input type="checkbox" checked={isCompleted}
+                        onChange={() => toggleCheckMutation.mutate({ id: item.id, isCompleted: isCompleted ? 0 : 1 })}
                         className="w-4 h-4 rounded border-gray-300 mt-0.5 shrink-0" />
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
                           <Badge variant="outline" className="text-xs px-1.5">{item.category}</Badge>
-                          <span className={`text-sm font-medium ${item.isCompleted === 1 ? "line-through text-muted-foreground" : ""}`}>{item.title}</span>
+                          <span className={`text-sm font-medium ${isCompleted ? "line-through text-muted-foreground" : ""}`}>{item.title}</span>
                           {cAttachments.length > 0 && <span className="text-xs text-muted-foreground"><Camera className="w-3 h-3 inline" /> {cAttachments.length}</span>}
+                          <Button variant="ghost" size="icon" className="h-6 w-6 ml-auto shrink-0" onClick={() => setEditingCheck(item)}>
+                            <Pencil className="w-3 h-3" />
+                          </Button>
                         </div>
-                        {item.memo && <p className="text-sm text-muted-foreground mt-1">{item.memo}</p>}
-                        {cAttachments.length > 0 && (
-                          <div className="mt-2">
-                            <AttachmentPreviewGrid attachments={cAttachments} />
-                          </div>
+                        {/* 완료되지 않은 항목만 상세내용 표시 */}
+                        {!isCompleted && (
+                          <>
+                            {item.memo && <p className="text-sm text-muted-foreground mt-1">{item.memo}</p>}
+                            {cAttachments.length > 0 && (
+                              <div className="mt-2">
+                                <AttachmentPreviewGrid attachments={cAttachments} />
+                              </div>
+                            )}
+                          </>
                         )}
-                        <ImageDropZone projectId={projectId} phase="CONSTRUCTION" subCategory="체크리스트첨부"
-                          existingUrls={[]}
-                          onUploaded={(urls) => toggleCheckMutation.mutate({ id: item.id, attachments: JSON.stringify([...cAttachments, ...urls]) })} />
                       </div>
                     </div>
                   </div>
@@ -2203,40 +2219,46 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
             <p className="text-sm text-muted-foreground text-center py-4">등록된 검수가 없습니다</p>
           ) : (
             <div className="space-y-3">
-              {inspections.map((insp) => (
+              {inspections.map((insp) => {
+                const inspAttachments: string[] = (insp as any).attachments ? JSON.parse((insp as any).attachments) : [];
+                return (
                 <div key={insp.id} className="p-3 rounded-lg border">
-                  <div className="cursor-pointer" onClick={() => setExpandedInsp(expandedInsp === insp.id ? null : insp.id)}>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-medium">{insp.title}</span>
-                      <Badge variant="outline" className="text-xs">{insp.category}</Badge>
-                      <Badge variant="outline" className={getInspectionResultColor(insp.result)}>{getInspectionResultLabel(insp.result)}</Badge>
+                  <div className="flex items-start gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-medium">{insp.title}</span>
+                        <Badge variant="outline" className="text-xs">{insp.category}</Badge>
+                        <Badge variant="outline" className={getInspectionResultColor(insp.result)}>{getInspectionResultLabel(insp.result)}</Badge>
+                        {inspAttachments.length > 0 && <span className="text-xs text-muted-foreground"><Camera className="w-3 h-3 inline" /> {inspAttachments.length}</span>}
+                      </div>
+                      <div className="flex gap-3 text-xs text-muted-foreground mt-1">
+                        {insp.scheduledDate && <span>예정: {insp.scheduledDate}</span>}
+                        {insp.completedDate && <span>완료: {insp.completedDate}</span>}
+                        {insp.inspector && <span>검사자: {insp.inspector}</span>}
+                      </div>
+                      {insp.findings && <p className="text-xs text-muted-foreground mt-1">소견: {insp.findings}</p>}
+                      {inspAttachments.length > 0 && (
+                        <div className="mt-2"><AttachmentPreviewGrid attachments={inspAttachments} /></div>
+                      )}
                     </div>
-                    <div className="flex gap-3 text-xs text-muted-foreground mt-1">
-                      {insp.scheduledDate && <span>예정: {insp.scheduledDate}</span>}
-                      {insp.completedDate && <span>완료: {insp.completedDate}</span>}
-                      {insp.inspector && <span>검사자: {insp.inspector}</span>}
+                    <div className="flex items-center gap-1 shrink-0">
+                      <select value={insp.result} onChange={(e) => updateInspMutation.mutate({ id: insp.id, data: { result: e.target.value } })}
+                        className="rounded-md border border-input bg-background px-1.5 py-0.5 text-xs h-7">
+                        <option value="PENDING">대기</option><option value="PASS">합격</option>
+                        <option value="CONDITIONAL_PASS">조건부합격</option><option value="FAIL">불합격</option>
+                      </select>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditingInsp(insp)}>
+                        <Pencil className="w-3.5 h-3.5" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive"
+                        onClick={() => { if (confirm("이 검수를 삭제하시겠습니까?")) deleteInspMutation.mutate(insp.id); }}>
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
                     </div>
                   </div>
-                  {expandedInsp === insp.id && (
-                    <div className="mt-3 pt-3 border-t space-y-3">
-                      <div className="flex items-center gap-2">
-                        <Label className="text-xs">결과:</Label>
-                        <select value={insp.result} onChange={(e) => updateInspMutation.mutate({ id: insp.id, data: { result: e.target.value } })}
-                          className="rounded-md border border-input bg-background px-2 py-1 text-xs">
-                          <option value="PENDING">대기</option><option value="PASS">합격</option>
-                          <option value="CONDITIONAL_PASS">조건부합격</option><option value="FAIL">불합격</option>
-                        </select>
-                      </div>
-                      <div className="space-y-1"><Label className="text-xs">완료일</Label>
-                        <DateInput defaultValue={insp.completedDate || ""} onChange={(e) => updateInspMutation.mutate({ id: insp.id, data: { completedDate: e.target.value || null } })} className="h-8 text-xs" />
-                      </div>
-                      <div className="space-y-1"><Label className="text-xs">검사 소견</Label>
-                        <Textarea defaultValue={insp.findings || ""} onBlur={(e) => updateInspMutation.mutate({ id: insp.id, data: { findings: e.target.value || null } })} className="text-xs min-h-[60px]" />
-                      </div>
-                    </div>
-                  )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>
@@ -2277,7 +2299,7 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
                 return (
                 <div key={defect.id} className="p-3 rounded-lg border">
                   <div className="flex items-start gap-2">
-                    <div className="flex-1 cursor-pointer" onClick={() => setExpandedDefect(expandedDefect === defect.id ? null : defect.id)}>
+                    <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-medium">{defect.title}</span>
                         <Badge variant="outline" className={getDefectSeverityColor(defect.severity)}>{getDefectSeverityLabel(defect.severity)}</Badge>
@@ -2285,40 +2307,27 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
                         {defAttachments.length > 0 && <span className="text-xs text-muted-foreground"><Camera className="w-3 h-3 inline" /> {defAttachments.length}</span>}
                       </div>
                       <p className="text-xs text-muted-foreground mt-1">위치: {defect.location}</p>
+                      {defect.description && <p className="text-xs text-muted-foreground mt-0.5">{defect.description}</p>}
                       {defect.assignee && <p className="text-xs text-muted-foreground">담당: {defect.assignee}</p>}
+                      {defAttachments.length > 0 && (
+                        <div className="mt-2"><AttachmentPreviewGrid attachments={defAttachments} /></div>
+                      )}
                     </div>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => setEditingDefect(defect)}>
-                      <Pencil className="w-3.5 h-3.5" />
-                    </Button>
-                  </div>
-                  {/* Inline attachments when collapsed */}
-                  {expandedDefect !== defect.id && defAttachments.length > 0 && (
-                    <div className="mt-2"><AttachmentPreviewGrid attachments={defAttachments} /></div>
-                  )}
-                  {expandedDefect === defect.id && (
-                    <div className="mt-3 pt-3 border-t space-y-3">
-                      <p className="text-sm">{defect.description}</p>
-                      {defAttachments.length > 0 && <AttachmentPreviewGrid attachments={defAttachments} />}
-                      <FileDropZone projectId={projectId} phase="CONSTRUCTION" subCategory="하자첨부" acceptFiles
-                        existingUrls={[]}
-                        onUploaded={(urls) => updateDefectMutation.mutate({ id: defect.id, data: { attachments: JSON.stringify([...defAttachments, ...urls]) } })} />
-                      <div className="flex items-center gap-2">
-                        <Label className="text-xs">상태:</Label>
-                        <select value={defect.status} onChange={(e) => updateDefectMutation.mutate({ id: defect.id, data: { status: e.target.value } })}
-                          className="rounded-md border border-input bg-background px-2 py-1 text-xs">
-                          <option value="OPEN">접수</option><option value="IN_REPAIR">수리중</option><option value="REPAIRED">수리완료</option>
-                          <option value="VERIFIED">확인</option><option value="CLOSED">종결</option>
-                        </select>
-                      </div>
-                      <div className="space-y-1"><Label className="text-xs">담당자</Label>
-                        <Input defaultValue={defect.assignee || ""} onBlur={(e) => updateDefectMutation.mutate({ id: defect.id, data: { assignee: e.target.value || null } })} className="h-8 text-xs" />
-                      </div>
-                      <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:text-destructive"
+                    <div className="flex items-center gap-1 shrink-0">
+                      <select value={defect.status} onChange={(e) => updateDefectMutation.mutate({ id: defect.id, data: { status: e.target.value } })}
+                        className="rounded-md border border-input bg-background px-1.5 py-0.5 text-xs h-7">
+                        <option value="OPEN">접수</option><option value="IN_REPAIR">수리중</option><option value="REPAIRED">수리완료</option>
+                        <option value="VERIFIED">확인</option><option value="CLOSED">종결</option>
+                      </select>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditingDefect(defect)}>
+                        <Pencil className="w-3.5 h-3.5" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive"
                         onClick={() => { if (confirm("이 하자를 삭제하시겠습니까?")) deleteDefectMutation.mutate(defect.id); }}>
-                        <Trash2 className="w-3 h-3 mr-1" />삭제
+                        <Trash2 className="w-3.5 h-3.5" />
                       </Button>
                     </div>
-                  )}
+                  </div>
                 </div>
                 );
               })}
@@ -2378,6 +2387,100 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
       {/* 건축주 요청사항 (시공 단계) */}
       <RequestsSection projectId={projectId} phase="CONSTRUCTION" />
 
+      {/* 시공 체크리스트 수정 다이얼로그 */}
+      {editingCheck && (() => {
+        const ckAttachments: string[] = (editingCheck as any).attachments ? JSON.parse((editingCheck as any).attachments) : [];
+        return (
+        <Dialog open onOpenChange={() => setEditingCheck(null)}>
+          <DialogContent>
+            <DialogHeader><DialogTitle>체크리스트 항목 수정</DialogTitle></DialogHeader>
+            <form onSubmit={(e) => {
+              e.preventDefault(); const fd = new FormData(e.currentTarget);
+              toggleCheckMutation.mutate({ id: editingCheck.id, title: fd.get("title") as string, memo: fd.get("memo") as string || null });
+              setEditingCheck(null);
+            }} className="space-y-4">
+              <div className="space-y-2"><Label>항목명</Label><Input name="title" required defaultValue={editingCheck.title} /></div>
+              <div className="space-y-2"><Label>메모</Label><Textarea name="memo" defaultValue={editingCheck.memo || ""} /></div>
+              <div className="space-y-2">
+                <Label>첨부파일</Label>
+                {ckAttachments.length > 0 && (
+                  <AttachmentDisplay urls={ckAttachments} onRemove={(idx) => {
+                    const next = ckAttachments.filter((_, i) => i !== idx);
+                    toggleCheckMutation.mutate({ id: editingCheck.id, attachments: JSON.stringify(next) });
+                  }} compact />
+                )}
+                <FileDropZone projectId={projectId} phase="CONSTRUCTION" subCategory="체크리스트첨부" acceptFiles
+                  existingUrls={[]}
+                  onUploaded={(urls) => toggleCheckMutation.mutate({ id: editingCheck.id, attachments: JSON.stringify([...ckAttachments, ...urls]) })} />
+              </div>
+              <Button type="submit" className="w-full">저장</Button>
+            </form>
+          </DialogContent>
+        </Dialog>
+        );
+      })()}
+
+      {/* 검수 수정 다이얼로그 */}
+      {editingInsp && (() => {
+        const inspAttachments: string[] = (editingInsp as any).attachments ? JSON.parse((editingInsp as any).attachments) : [];
+        return (
+        <Dialog open onOpenChange={() => setEditingInsp(null)}>
+          <DialogContent>
+            <DialogHeader><DialogTitle>검수 수정</DialogTitle></DialogHeader>
+            <form onSubmit={(e) => {
+              e.preventDefault(); const fd = new FormData(e.currentTarget);
+              updateInspMutation.mutate({
+                id: editingInsp.id,
+                data: {
+                  title: fd.get("title"), category: fd.get("category"),
+                  scheduledDate: fd.get("scheduledDate") || null,
+                  completedDate: fd.get("completedDate") || null,
+                  inspector: fd.get("inspector") || null,
+                  result: fd.get("result"),
+                  findings: fd.get("findings") || null,
+                },
+              });
+              setEditingInsp(null);
+              toast({ title: "검수가 수정되었습니다" });
+            }} className="space-y-4">
+              <div className="space-y-2"><Label>검수명</Label><Input name="title" required defaultValue={editingInsp.title} /></div>
+              <div className="space-y-2"><Label>분류</Label><Input name="category" required defaultValue={editingInsp.category} /></div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2"><Label>예정일</Label><DateInput name="scheduledDate" defaultValue={editingInsp.scheduledDate || ""} /></div>
+                <div className="space-y-2"><Label>완료일</Label><DateInput name="completedDate" defaultValue={editingInsp.completedDate || ""} /></div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2"><Label>결과</Label>
+                  <select name="result" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" defaultValue={editingInsp.result}>
+                    <option value="PENDING">대기</option><option value="PASS">합격</option>
+                    <option value="CONDITIONAL_PASS">조건부합격</option><option value="FAIL">불합격</option>
+                  </select>
+                </div>
+                <div className="space-y-2"><Label>검사자</Label><Input name="inspector" defaultValue={editingInsp.inspector || ""} /></div>
+              </div>
+              <div className="space-y-2"><Label>검사 소견</Label><Textarea name="findings" defaultValue={editingInsp.findings || ""} /></div>
+              <div className="space-y-2">
+                <Label>첨부파일</Label>
+                {inspAttachments.length > 0 && (
+                  <AttachmentDisplay urls={inspAttachments} onRemove={(idx) => {
+                    const next = inspAttachments.filter((_, i) => i !== idx);
+                    updateInspMutation.mutate({ id: editingInsp.id, data: { attachments: JSON.stringify(next) } });
+                  }} compact />
+                )}
+                <FileDropZone projectId={projectId} phase="CONSTRUCTION" subCategory="검수첨부" acceptFiles
+                  existingUrls={[]}
+                  onUploaded={(urls) => updateInspMutation.mutate({ id: editingInsp.id, data: { attachments: JSON.stringify([...inspAttachments, ...urls]) } })} />
+              </div>
+              <div className="flex gap-2">
+                <Button type="submit" className="flex-1">저장</Button>
+                <Button type="button" variant="destructive" onClick={() => { if (confirm("이 검수를 삭제하시겠습니까?")) { deleteInspMutation.mutate(editingInsp.id); setEditingInsp(null); } }}>삭제</Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+        );
+      })()}
+
       {/* 공정 수정 다이얼로그 */}
       {editTask && (
         <Dialog open onOpenChange={() => setEditTask(null)}>
@@ -2428,8 +2531,7 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
   const [selectedPreset, setSelectedPreset] = useState("");
   const [newSchedAttachments, setNewSchedAttachments] = useState<string[]>([]);
   const [newLogAttachments, setNewLogAttachments] = useState<string[]>([]);
-  const [expandedSchedule, setExpandedSchedule] = useState<string | null>(null);
-  const [expandedLog, setExpandedLog] = useState<string | null>(null);
+  // expandedSchedule/expandedLog removed - edit via pencil icon
   const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [timeValue, setTimeValue] = useState({ hour: "09", minute: "00", ampm: "오전" });
@@ -2542,15 +2644,14 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
             <div className="space-y-2">
               {schedules.sort((a, b) => a.date.localeCompare(b.date)).map((s) => {
                 const sAttachments: string[] = (s as any).attachments ? JSON.parse((s as any).attachments) : [];
-                const isExpanded = expandedSchedule === s.id;
                 return (
                 <div key={s.id} className="p-3 rounded-lg border">
                   <div className="flex items-start gap-3">
-                    <div className="text-sm text-muted-foreground whitespace-nowrap cursor-pointer" onClick={() => setExpandedSchedule(isExpanded ? null : s.id)}>
+                    <div className="text-sm text-muted-foreground whitespace-nowrap">
                       <div>{s.date}</div>
                       {(s as any).time && <div className="text-xs">{(s as any).time}</div>}
                     </div>
-                    <div className="flex-1 cursor-pointer" onClick={() => setExpandedSchedule(isExpanded ? null : s.id)}>
+                    <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium">{s.title}</span>
                         <Badge variant="outline" className={getScheduleCategoryColor(s.category)}>{getCategoryLabel(s.category)}</Badge>
@@ -2562,26 +2663,20 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
                         </p>
                       )}
                       {s.memo && <p className="text-xs text-muted-foreground mt-0.5">{s.memo}</p>}
+                      {sAttachments.length > 0 && (
+                        <div className="mt-2"><AttachmentPreviewGrid attachments={sAttachments} /></div>
+                      )}
                     </div>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => setEditingSchedule(s)}>
-                      <Pencil className="w-3.5 h-3.5" />
-                    </Button>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditingSchedule(s)}>
+                        <Pencil className="w-3.5 h-3.5" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive"
+                        onClick={() => { if (confirm("이 일정을 삭제하시겠습니까?")) deleteScheduleMutation.mutate(s.id); }}>
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
                   </div>
-                  {/* Inline attachments when collapsed */}
-                  {!isExpanded && sAttachments.length > 0 && (
-                    <div className="mt-2 ml-16" onClick={(e) => e.stopPropagation()}>
-                      <AttachmentPreviewGrid attachments={sAttachments} />
-                    </div>
-                  )}
-                  {/* Expanded: preview + upload */}
-                  {isExpanded && (
-                    <div className="mt-3 pt-3 border-t ml-16" onClick={(e) => e.stopPropagation()}>
-                      {sAttachments.length > 0 && <div className="mb-2"><AttachmentPreviewGrid attachments={sAttachments} /></div>}
-                      <FileDropZone projectId={projectId} phase={currentPhase} subCategory="일정첨부" acceptFiles
-                        existingUrls={[]}
-                        onUploaded={(urls) => updateScheduleMutation.mutate({ id: s.id, data: { attachments: JSON.stringify([...sAttachments, ...urls]) } })} />
-                    </div>
-                  )}
                 </div>
                 );
               })}
@@ -2628,36 +2723,31 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
             <div className="space-y-3">
               {dailyLogs.sort((a, b) => b.date.localeCompare(a.date)).map((log) => {
                 const logAttachments: string[] = (log as any).attachments ? JSON.parse((log as any).attachments) : [];
-                const isLogExpanded = expandedLog === log.id;
                 return (
                 <div key={log.id} className="p-3 rounded-lg border">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="flex items-center gap-3 flex-1 cursor-pointer" onClick={() => setExpandedLog(isLogExpanded ? null : log.id)}>
-                      <span className="text-sm font-medium">{log.date}</span>
-                      {log.weather && <span className="text-xs text-muted-foreground flex items-center gap-1"><Cloud className="w-3 h-3" />{log.weather}</span>}
-                      {log.workers != null && <span className="text-xs text-muted-foreground flex items-center gap-1"><Users className="w-3 h-3" />{log.workers}명</span>}
-                      {logAttachments.length > 0 && <span className="text-xs text-muted-foreground"><Camera className="w-3 h-3 inline" /> {logAttachments.length}</span>}
+                  <div className="flex items-start gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-3 mb-1">
+                        <span className="text-sm font-medium">{log.date}</span>
+                        {log.weather && <span className="text-xs text-muted-foreground flex items-center gap-1"><Cloud className="w-3 h-3" />{log.weather}</span>}
+                        {log.workers != null && <span className="text-xs text-muted-foreground flex items-center gap-1"><Users className="w-3 h-3" />{log.workers}명</span>}
+                        {logAttachments.length > 0 && <span className="text-xs text-muted-foreground"><Camera className="w-3 h-3 inline" /> {logAttachments.length}</span>}
+                      </div>
+                      <p className="text-sm">{log.content}</p>
+                      {logAttachments.length > 0 && (
+                        <div className="mt-2"><AttachmentPreviewGrid attachments={logAttachments} /></div>
+                      )}
                     </div>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => setEditingLog(log)}>
-                      <Pencil className="w-3.5 h-3.5" />
-                    </Button>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditingLog(log)}>
+                        <Pencil className="w-3.5 h-3.5" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive"
+                        onClick={() => { if (confirm("이 작업일지를 삭제하시겠습니까?")) deleteLogMutation.mutate(log.id); }}>
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
                   </div>
-                  <p className="text-sm">{log.content}</p>
-                  {/* Inline attachments */}
-                  {!isLogExpanded && logAttachments.length > 0 && (
-                    <div className="mt-2" onClick={(e) => e.stopPropagation()}>
-                      <AttachmentPreviewGrid attachments={logAttachments} />
-                    </div>
-                  )}
-                  {/* Expanded: preview + upload */}
-                  {isLogExpanded && (
-                    <div className="mt-3 pt-3 border-t" onClick={(e) => e.stopPropagation()}>
-                      {logAttachments.length > 0 && <div className="mb-2"><AttachmentPreviewGrid attachments={logAttachments} /></div>}
-                      <FileDropZone projectId={projectId} phase={currentPhase} subCategory="일지첨부" acceptFiles
-                        existingUrls={[]}
-                        onUploaded={(urls) => updateLogMutation.mutate({ id: log.id, data: { attachments: JSON.stringify([...logAttachments, ...urls]) } })} />
-                    </div>
-                  )}
                 </div>
                 );
               })}
@@ -3152,27 +3242,44 @@ function PhotosTab({ projectId, currentPhase, project }: { projectId: string; cu
         </h3>
         <div className="flex gap-2">
           {totalPhotos > 0 && (
-            <div className="flex gap-1">
-              <Button size="sm" variant="outline" onClick={handleDownloadZip} disabled={downloading}>
-                {downloading ? "다운로드 중..." : "전체 ZIP"}
-              </Button>
-              {totalByPhase("DESIGN") > 0 && (
-                <Button size="sm" variant="outline" disabled={downloading}
-                  onClick={() => handlePhaseDownloadZip("DESIGN")}>설계</Button>
-              )}
-              {totalByPhase("CONSTRUCTION") > 0 && (
-                <Button size="sm" variant="outline" disabled={downloading}
-                  onClick={() => handlePhaseDownloadZip("CONSTRUCTION")}>시공</Button>
-              )}
-              {totalByPhase("COMPLETION") > 0 && (
-                <Button size="sm" variant="outline" disabled={downloading}
-                  onClick={() => handlePhaseDownloadZip("COMPLETION")}>준공</Button>
-              )}
-              {totalByPhase("PORTFOLIO") > 0 && (
-                <Button size="sm" variant="outline" disabled={downloading}
-                  onClick={() => handlePhaseDownloadZip("PORTFOLIO")}>포트폴리오</Button>
-              )}
-            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="outline" disabled={downloading}>
+                  <Download className="w-4 h-4 mr-1" />
+                  {downloading ? "다운로드 중..." : "ZIP 다운로드"}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={handleDownloadZip}>
+                  전체 다운로드 ({totalPhotos}장)
+                </DropdownMenuItem>
+                {totalByPhase("DESIGN") > 0 && (
+                  <DropdownMenuItem onClick={() => handlePhaseDownloadZip("DESIGN")}>
+                    설계 ({totalByPhase("DESIGN")}장)
+                  </DropdownMenuItem>
+                )}
+                {totalByPhase("PERMIT") > 0 && (
+                  <DropdownMenuItem onClick={() => handlePhaseDownloadZip("PERMIT")}>
+                    인허가 ({totalByPhase("PERMIT")}장)
+                  </DropdownMenuItem>
+                )}
+                {totalByPhase("CONSTRUCTION") > 0 && (
+                  <DropdownMenuItem onClick={() => handlePhaseDownloadZip("CONSTRUCTION")}>
+                    시공 ({totalByPhase("CONSTRUCTION")}장)
+                  </DropdownMenuItem>
+                )}
+                {totalByPhase("COMPLETION") > 0 && (
+                  <DropdownMenuItem onClick={() => handlePhaseDownloadZip("COMPLETION")}>
+                    준공 ({totalByPhase("COMPLETION")}장)
+                  </DropdownMenuItem>
+                )}
+                {totalByPhase("PORTFOLIO") > 0 && (
+                  <DropdownMenuItem onClick={() => handlePhaseDownloadZip("PORTFOLIO")}>
+                    포트폴리오 ({totalByPhase("PORTFOLIO")}장)
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
           <Dialog open={uploadDialogOpen} onOpenChange={(o) => { setUploadDialogOpen(o); if (!o) setPastedFiles([]); }}>
             <DialogTrigger asChild><Button size="sm"><Plus className="w-4 h-4 mr-1" />사진 업로드</Button></DialogTrigger>

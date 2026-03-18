@@ -95,6 +95,7 @@ export interface IStorage {
   getInspectionsByProject(projectId: string): Promise<Inspection[]>;
   createInspection(insp: InsertInspection): Promise<Inspection>;
   updateInspection(id: string, data: Partial<InsertInspection>): Promise<Inspection | undefined>;
+  deleteInspection(id: string): Promise<boolean>;
 
   // Defects
   getDefectsByProject(projectId: string): Promise<Defect[]>;
@@ -688,7 +689,7 @@ export class MemStorage implements IStorage {
 
   async createInspection(insertInsp: InsertInspection): Promise<Inspection> {
     const id = randomUUID();
-    const insp: Inspection = { id, scheduledDate: null, completedDate: null, inspector: null, findings: null, createdBy: null, ...insertInsp };
+    const insp: Inspection = { id, scheduledDate: null, completedDate: null, inspector: null, findings: null, attachments: null, createdBy: null, ...insertInsp };
     this.inspections.set(id, insp);
     return insp;
   }
@@ -699,6 +700,10 @@ export class MemStorage implements IStorage {
     const updated = { ...insp, ...data };
     this.inspections.set(id, updated);
     return updated;
+  }
+
+  async deleteInspection(id: string): Promise<boolean> {
+    return this.inspections.delete(id);
   }
 
   // Defects

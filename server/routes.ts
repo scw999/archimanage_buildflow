@@ -514,6 +514,12 @@ export async function registerRoutes(
     return res.json(inspection);
   });
 
+  app.delete("/api/inspections/:id", authMiddleware, async (req: Request, res: Response) => {
+    const deleted = await storage.deleteInspection(req.params.id);
+    if (!deleted) return res.status(404).json({ message: "검수 항목을 찾을 수 없습니다" });
+    return res.json({ success: true });
+  });
+
   // Defects
   app.get("/api/projects/:id/defects", authMiddleware, async (req: Request, res: Response) => {
     const defects = await storage.getDefectsByProject(req.params.id);

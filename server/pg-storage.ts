@@ -262,6 +262,11 @@ export class PgStorage implements IStorage {
     return row;
   }
 
+  async deleteInspection(id: string): Promise<boolean> {
+    const result = await db.delete(inspections).where(eq(inspections.id, id));
+    return (result as any).rowCount > 0;
+  }
+
   // Defects
   async getDefectsByProject(projectId: string): Promise<Defect[]> {
     return db.select().from(defects).where(eq(defects.projectId, projectId));

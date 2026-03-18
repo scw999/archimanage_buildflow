@@ -385,6 +385,7 @@ export const inspections = pgTable("inspections", {
   result: text("result").notNull().$type<typeof InspectionResult[number]>(),
   inspector: text("inspector"),
   findings: text("findings"),
+  attachments: text("attachments"),
   createdBy: varchar("created_by"),
 });
 
@@ -397,6 +398,7 @@ export const insertInspectionSchema = createInsertSchema(inspections).pick({
   result: true,
   inspector: true,
   findings: true,
+  attachments: true,
   createdBy: true,
 });
 
