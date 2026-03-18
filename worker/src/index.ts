@@ -102,6 +102,26 @@ function getDb(c: { env: Bindings }) {
   return drizzle(c.env.DB, { schema });
 }
 
+// Helper: clean up R2 files + photos table for attachment URLs
+async function cleanupAttachments(db: ReturnType<typeof getDb>, r2: R2Bucket, attachmentsJson: string | null) {
+  if (!attachmentsJson) return;
+  let urls: string[];
+  try { urls = JSON.parse(attachmentsJson); if (!Array.isArray(urls)) return; } catch { return; }
+  for (const url of urls) {
+    // Delete from R2
+    const r2Key = url.includes("/api/photos/file/") ? url.split("/api/photos/file/")[1] : null;
+    if (r2Key) { try { await r2.delete(r2Key); } catch { /* ignore */ } }
+    // Delete matching photo record
+    try { await db.delete(schema.photos).where(eq(schema.photos.imageUrl, url)); } catch { /* ignore */ }
+  }
+}
+
+// Helper: clean up single photo from R2
+async function cleanupPhotoR2(r2: R2Bucket, imageUrl: string) {
+  const r2Key = imageUrl.includes("/api/photos/file/") ? imageUrl.split("/api/photos/file/")[1] : null;
+  if (r2Key) { try { await r2.delete(r2Key); } catch { /* ignore */ } }
+}
+
 // Helper: get current user with role
 async function getCurrentUser(c: any) {
   const db = getDb(c);
@@ -314,8 +334,10 @@ app.patch("/api/schedules/:id", async (c) => {
 
 app.delete("/api/schedules/:id", async (c) => {
   const db = getDb(c);
-  const result = await db.delete(schema.schedules).where(eq(schema.schedules.id, c.req.param("id"))).returning();
-  if (!result.length) return c.json({ message: "일정을 찾을 수 없습니다" }, 404);
+  const [schedule] = await db.select().from(schema.schedules).where(eq(schema.schedules.id, c.req.param("id")));
+  if (!schedule) return c.json({ message: "일정을 찾을 수 없습니다" }, 404);
+  await cleanupAttachments(db, c.env.R2_BUCKET, schedule.attachments);
+  await db.delete(schema.schedules).where(eq(schema.schedules.id, c.req.param("id")));
   return c.json({ ok: true });
 });
 
@@ -340,8 +362,10 @@ app.patch("/api/daily-logs/:id", async (c) => {
 
 app.delete("/api/daily-logs/:id", async (c) => {
   const db = getDb(c);
-  const result = await db.delete(schema.dailyLogs).where(eq(schema.dailyLogs.id, c.req.param("id"))).returning();
-  if (!result.length) return c.json({ message: "작업일지를 찾을 수 없습니다" }, 404);
+  const [dailyLog] = await db.select().from(schema.dailyLogs).where(eq(schema.dailyLogs.id, c.req.param("id")));
+  if (!dailyLog) return c.json({ message: "작업일지를 찾을 수 없습니다" }, 404);
+  await cleanupAttachments(db, c.env.R2_BUCKET, dailyLog.attachments);
+  await db.delete(schema.dailyLogs).where(eq(schema.dailyLogs.id, c.req.param("id")));
   return c.json({ ok: true });
 });
 
@@ -392,8 +416,10 @@ app.patch("/api/photos/:id", async (c) => {
 
 app.delete("/api/photos/:id", async (c) => {
   const db = getDb(c);
-  const result = await db.delete(schema.photos).where(eq(schema.photos.id, c.req.param("id"))).returning();
-  if (!result.length) return c.json({ message: "사진을 찾을 수 없습니다" }, 404);
+  const [photo] = await db.select().from(schema.photos).where(eq(schema.photos.id, c.req.param("id")));
+  if (!photo) return c.json({ message: "사진을 찾을 수 없습니다" }, 404);
+  await cleanupPhotoR2(c.env.R2_BUCKET, photo.imageUrl);
+  await db.delete(schema.photos).where(eq(schema.photos.id, c.req.param("id")));
   return c.json({ ok: true });
 });
 
@@ -593,8 +619,10 @@ app.patch("/api/requests/:id", async (c) => {
 
 app.delete("/api/requests/:id", async (c) => {
   const db = getDb(c);
-  const result = await db.delete(schema.clientRequests).where(eq(schema.clientRequests.id, c.req.param("id"))).returning();
-  if (!result.length) return c.json({ message: "요청사항을 찾을 수 없습니다" }, 404);
+  const [request] = await db.select().from(schema.clientRequests).where(eq(schema.clientRequests.id, c.req.param("id")));
+  if (!request) return c.json({ message: "요청사항을 찾을 수 없습니다" }, 404);
+  await cleanupAttachments(db, c.env.R2_BUCKET, request.attachments);
+  await db.delete(schema.clientRequests).where(eq(schema.clientRequests.id, c.req.param("id")));
   // Also delete related comments
   await db.delete(schema.comments).where(eq(schema.comments.clientRequestId, c.req.param("id")));
   return c.json({ ok: true });
@@ -633,8 +661,10 @@ app.patch("/api/design-changes/:id", async (c) => {
 
 app.delete("/api/design-changes/:id", async (c) => {
   const db = getDb(c);
-  const result = await db.delete(schema.designChanges).where(eq(schema.designChanges.id, c.req.param("id"))).returning();
-  if (!result.length) return c.json({ message: "설계변경을 찾을 수 없습니다" }, 404);
+  const [designChange] = await db.select().from(schema.designChanges).where(eq(schema.designChanges.id, c.req.param("id")));
+  if (!designChange) return c.json({ message: "설계변경을 찾을 수 없습니다" }, 404);
+  await cleanupAttachments(db, c.env.R2_BUCKET, designChange.attachments);
+  await db.delete(schema.designChanges).where(eq(schema.designChanges.id, c.req.param("id")));
   return c.json({ ok: true });
 });
 
@@ -659,8 +689,10 @@ app.patch("/api/design-checks/:id", async (c) => {
 
 app.delete("/api/design-checks/:id", async (c) => {
   const db = getDb(c);
-  const result = await db.delete(schema.designChecks).where(eq(schema.designChecks.id, c.req.param("id"))).returning();
-  if (!result.length) return c.json({ message: "체크리스트 항목을 찾을 수 없습니다" }, 404);
+  const [designCheck] = await db.select().from(schema.designChecks).where(eq(schema.designChecks.id, c.req.param("id")));
+  if (!designCheck) return c.json({ message: "체크리스트 항목을 찾을 수 없습니다" }, 404);
+  await cleanupAttachments(db, c.env.R2_BUCKET, designCheck.attachments);
+  await db.delete(schema.designChecks).where(eq(schema.designChecks.id, c.req.param("id")));
   return c.json({ ok: true });
 });
 
@@ -734,8 +766,10 @@ app.patch("/api/inspections/:id", async (c) => {
 
 app.delete("/api/inspections/:id", async (c) => {
   const db = getDb(c);
-  const result = await db.delete(schema.inspections).where(eq(schema.inspections.id, c.req.param("id"))).returning();
-  if (!result.length) return c.json({ message: "검수 항목을 찾을 수 없습니다" }, 404);
+  const [inspection] = await db.select().from(schema.inspections).where(eq(schema.inspections.id, c.req.param("id")));
+  if (!inspection) return c.json({ message: "검수 항목을 찾을 수 없습니다" }, 404);
+  await cleanupAttachments(db, c.env.R2_BUCKET, inspection.attachments);
+  await db.delete(schema.inspections).where(eq(schema.inspections.id, c.req.param("id")));
   return c.json({ ok: true });
 });
 
@@ -760,8 +794,10 @@ app.patch("/api/defects/:id", async (c) => {
 
 app.delete("/api/defects/:id", async (c) => {
   const db = getDb(c);
-  const result = await db.delete(schema.defects).where(eq(schema.defects.id, c.req.param("id"))).returning();
-  if (!result.length) return c.json({ message: "하자를 찾을 수 없습니다" }, 404);
+  const [defect] = await db.select().from(schema.defects).where(eq(schema.defects.id, c.req.param("id")));
+  if (!defect) return c.json({ message: "하자를 찾을 수 없습니다" }, 404);
+  await cleanupAttachments(db, c.env.R2_BUCKET, defect.attachments);
+  await db.delete(schema.defects).where(eq(schema.defects.id, c.req.param("id")));
   return c.json({ ok: true });
 });
 

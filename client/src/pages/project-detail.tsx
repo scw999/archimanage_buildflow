@@ -972,6 +972,11 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/design-changes`] }); toast({ title: "설계변경이 삭제되었습니다" }); },
   });
 
+  const deletePhotoMutation = useMutation({
+    mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/photos/${id}`); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/photos`] }); toast({ title: "사진이 삭제되었습니다" }); },
+  });
+
   const [editingChange, setEditingChange] = useState<DesignChange | null>(null);
 
   const completedCount = designChecks?.filter((c) => c.isCompleted === 1).length ?? 0;
@@ -1017,10 +1022,17 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
                   {slotPhotos.length > 0 ? (
                     <div className="space-y-2">
                       {slotPhotos.map((p) => (
-                        <button key={p.id} type="button" className="w-full aspect-[4/3] rounded-lg overflow-hidden border hover:opacity-90 transition-opacity"
-                          onClick={() => setDesignLightbox(p.imageUrl)}>
-                          <img src={p.imageUrl} alt={label} className="w-full h-full object-cover" />
-                        </button>
+                        <div key={p.id} className="relative group">
+                          <button type="button" className="w-full aspect-[4/3] rounded-lg overflow-hidden border hover:opacity-90 transition-opacity"
+                            onClick={() => setDesignLightbox(p.imageUrl)}>
+                            <img src={p.imageUrl} alt={label} className="w-full h-full object-cover" />
+                          </button>
+                          <button type="button"
+                            className="absolute top-1 right-1 bg-black/60 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-xs hover:bg-red-600"
+                            onClick={() => { if (confirm("이 사진을 삭제하시겠습니까?")) deletePhotoMutation.mutate(p.id); }}>
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       ))}
                     </div>
                   ) : (
@@ -1060,10 +1072,17 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
                   {slotPhotos.length > 0 ? (
                     <div className="space-y-2">
                       {slotPhotos.map((p) => (
-                        <button key={p.id} type="button" className="w-full aspect-[4/3] rounded-lg overflow-hidden border hover:opacity-90 transition-opacity"
-                          onClick={() => setDesignLightbox(p.imageUrl)}>
-                          <img src={p.imageUrl} alt={label} className="w-full h-full object-cover" />
-                        </button>
+                        <div key={p.id} className="relative group">
+                          <button type="button" className="w-full aspect-[4/3] rounded-lg overflow-hidden border hover:opacity-90 transition-opacity"
+                            onClick={() => setDesignLightbox(p.imageUrl)}>
+                            <img src={p.imageUrl} alt={label} className="w-full h-full object-cover" />
+                          </button>
+                          <button type="button"
+                            className="absolute top-1 right-1 bg-black/60 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-xs hover:bg-red-600"
+                            onClick={() => { if (confirm("이 사진을 삭제하시겠습니까?")) deletePhotoMutation.mutate(p.id); }}>
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       ))}
                     </div>
                   ) : (
