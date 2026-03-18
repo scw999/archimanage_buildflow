@@ -251,6 +251,12 @@ const CONSTRUCTION_CATEGORIES = [
   { value: "기타", label: "기타" },
 ];
 
+function safeParseAttachments(val: any): string[] {
+  if (!val || typeof val !== "string") return [];
+  try { const parsed = JSON.parse(val); return Array.isArray(parsed) ? parsed : []; }
+  catch { return []; }
+}
+
 function isImageLikeUrl(url: string) {
   return /\.(png|jpe?g|gif|webp|bmp|svg)(\?.*)?$/i.test(url) || url.includes("/api/photos/file/") || url.includes("/uploads/photos/");
 }
@@ -1127,7 +1133,7 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
                   <h4 className="text-sm font-semibold text-muted-foreground mb-2">{getDesignCheckCategoryLabel(cat)}</h4>
                   <div className="space-y-2">
                     {items.map((item) => {
-                      const itemAttachments: string[] = (item as any).attachments ? JSON.parse((item as any).attachments) : [];
+                      const itemAttachments: string[] = safeParseAttachments((item as any).attachments);
                       const isCompleted = item.isCompleted === 1;
                       return (
                       <div key={item.id} className="p-3 rounded-lg border hover:bg-muted/30">
@@ -1201,7 +1207,7 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
           ) : (
             <div className="space-y-3">
               {designChanges.map((dc) => {
-                const dcAttachments: string[] = (dc as any).attachments ? JSON.parse((dc as any).attachments) : [];
+                const dcAttachments: string[] = safeParseAttachments((dc as any).attachments);
                 return (
                 <div key={dc.id} className="p-3 rounded-lg border">
                   <div className="flex items-start gap-2">
@@ -1246,7 +1252,7 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
 
       {/* 설계변경 수정 다이얼로그 */}
       {editingChange && (() => {
-        const ecAttachments: string[] = (editingChange as any).attachments ? JSON.parse((editingChange as any).attachments) : [];
+        const ecAttachments: string[] = safeParseAttachments((editingChange as any).attachments);
         return (
         <Dialog open onOpenChange={() => setEditingChange(null)}>
           <DialogContent>
@@ -1325,7 +1331,7 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
 
       {/* 체크리스트 수정 다이얼로그 */}
       {editingCheck && (() => {
-        const ecAttachments: string[] = (editingCheck as any).attachments ? JSON.parse((editingCheck as any).attachments) : [];
+        const ecAttachments: string[] = safeParseAttachments((editingCheck as any).attachments);
         return (
         <Dialog open onOpenChange={() => setEditingCheck(null)}>
           <DialogContent>
@@ -1476,7 +1482,7 @@ function RequestsSection({ projectId, phase }: { projectId: string; phase: strin
         ) : (
           <div className="space-y-2">
             {requests.map((req) => {
-              const attachments: string[] = (req as any).attachments ? JSON.parse((req as any).attachments) : [];
+              const attachments: string[] = safeParseAttachments((req as any).attachments);
               return (
                 <div key={req.id} className="p-3 rounded-lg border">
                   <div className="flex items-start gap-2">
@@ -1544,7 +1550,7 @@ function RequestsSection({ projectId, phase }: { projectId: string; phase: strin
       </CardContent>
       {/* 요청사항 수정 다이얼로그 */}
       {editingReq && (() => {
-        const erAttachments: string[] = (editingReq as any).attachments ? JSON.parse((editingReq as any).attachments) : [];
+        const erAttachments: string[] = safeParseAttachments((editingReq as any).attachments);
         return (
         <Dialog open onOpenChange={() => setEditingReq(null)}>
           <DialogContent>
@@ -2051,7 +2057,7 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
               {linkedDesignChecks.length > 0 && <h4 className="text-xs font-semibold text-muted-foreground mb-2">시공 항목</h4>}
               <div className="space-y-2">
                 {constructionChecks.map((item) => {
-                  const cAttachments: string[] = (item as any).attachments ? JSON.parse((item as any).attachments) : [];
+                  const cAttachments: string[] = safeParseAttachments((item as any).attachments);
                   const isCompleted = item.isCompleted === 1;
                   return (
                   <div key={item.id} className="p-3 rounded-lg border hover:bg-muted/30">
@@ -2250,7 +2256,7 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
           ) : (
             <div className="space-y-3">
               {inspections.map((insp) => {
-                const inspAttachments: string[] = (insp as any).attachments ? JSON.parse((insp as any).attachments) : [];
+                const inspAttachments: string[] = safeParseAttachments((insp as any).attachments);
                 return (
                 <div key={insp.id} className="p-3 rounded-lg border">
                   <div className="flex items-start gap-2">
@@ -2330,7 +2336,7 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
           ) : (
             <div className="space-y-3">
               {defects.map((defect) => {
-                const defAttachments: string[] = (defect as any).attachments ? JSON.parse((defect as any).attachments) : [];
+                const defAttachments: string[] = safeParseAttachments((defect as any).attachments);
                 return (
                 <div key={defect.id} className="p-3 rounded-lg border">
                   <div className="flex items-start gap-2">
@@ -2373,7 +2379,7 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
 
       {/* 하자 수정 다이얼로그 */}
       {editingDefect && (() => {
-        const edAttachments: string[] = (editingDefect as any).attachments ? JSON.parse((editingDefect as any).attachments) : [];
+        const edAttachments: string[] = safeParseAttachments((editingDefect as any).attachments);
         return (
         <Dialog open onOpenChange={() => setEditingDefect(null)}>
           <DialogContent>
@@ -2434,7 +2440,7 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
 
       {/* 시공 체크리스트 수정 다이얼로그 */}
       {editingCheck && (() => {
-        const ckAttachments: string[] = (editingCheck as any).attachments ? JSON.parse((editingCheck as any).attachments) : [];
+        const ckAttachments: string[] = safeParseAttachments((editingCheck as any).attachments);
         return (
         <Dialog open onOpenChange={() => setEditingCheck(null)}>
           <DialogContent>
@@ -2475,7 +2481,7 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
 
       {/* 검수 수정 다이얼로그 */}
       {editingInsp && (() => {
-        const inspAttachments: string[] = (editingInsp as any).attachments ? JSON.parse((editingInsp as any).attachments) : [];
+        const inspAttachments: string[] = safeParseAttachments((editingInsp as any).attachments);
         return (
         <Dialog open onOpenChange={() => setEditingInsp(null)}>
           <DialogContent>
@@ -2701,7 +2707,7 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
           ) : (
             <div className="space-y-2">
               {schedules.sort((a, b) => a.date.localeCompare(b.date)).map((s) => {
-                const sAttachments: string[] = (s as any).attachments ? JSON.parse((s as any).attachments) : [];
+                const sAttachments: string[] = safeParseAttachments((s as any).attachments);
                 return (
                 <div key={s.id} className="p-3 rounded-lg border">
                   <div className="flex items-start gap-3">
@@ -2780,7 +2786,7 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
           ) : (
             <div className="space-y-3">
               {dailyLogs.sort((a, b) => b.date.localeCompare(a.date)).map((log) => {
-                const logAttachments: string[] = (log as any).attachments ? JSON.parse((log as any).attachments) : [];
+                const logAttachments: string[] = safeParseAttachments((log as any).attachments);
                 return (
                 <div key={log.id} className="p-3 rounded-lg border">
                   <div className="flex items-start gap-3">
@@ -2816,7 +2822,7 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
 
       {/* 일정 수정 다이얼로그 */}
       {editingSchedule && (() => {
-        const esAttachments: string[] = (editingSchedule as any).attachments ? JSON.parse((editingSchedule as any).attachments) : [];
+        const esAttachments: string[] = safeParseAttachments((editingSchedule as any).attachments);
         return (
         <Dialog open onOpenChange={() => setEditingSchedule(null)}>
           <DialogContent>
@@ -2921,7 +2927,7 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
 
       {/* 작업일지 수정 다이얼로그 */}
       {editingLog && (() => {
-        const elAttachments: string[] = (editingLog as any).attachments ? JSON.parse((editingLog as any).attachments) : [];
+        const elAttachments: string[] = safeParseAttachments((editingLog as any).attachments);
         return (
         <Dialog open onOpenChange={() => setEditingLog(null)}>
           <DialogContent>
