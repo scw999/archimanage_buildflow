@@ -3281,24 +3281,41 @@ function PhotosTab({ projectId, currentPhase, project }: { projectId: string; cu
     }
   };
 
-  // ZIP download
-  const handleDownloadZip = async () => {
+  // Client-side ZIP download (avoids Worker timeout/CORS issues)
+  const buildAndDownloadZip = async (targetPhotos: Photo[], zipName: string) => {
     setDownloading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/projects/${projectId}/photos/download-zip`, {
-        headers: { Authorization: `Bearer ${getAuthToken()}` },
-      });
-      if (!res.ok) throw new Error("다운로드 실패");
-      const blob = await res.blob();
+      const { zipSync } = await import("fflate");
+      const zipFiles: Record<string, Uint8Array> = {};
+      const phaseLabels: Record<string, string> = { DESIGN: "01_설계", PERMIT: "02_인허가", CONSTRUCTION: "03_시공", COMPLETION: "04_준공", PORTFOLIO: "05_포트폴리오" };
+      const counters: Record<string, number> = {};
+      let downloaded = 0;
+
+      for (const photo of targetPhotos) {
+        try {
+          const res = await fetch(photo.imageUrl);
+          if (!res.ok) continue;
+          const buffer = await res.arrayBuffer();
+          const phaseFolder = phaseLabels[photo.phase] || photo.phase;
+          const sub = (photo as any).subCategory || "기타";
+          const folder = `${phaseFolder}/${sub}`;
+          counters[folder] = (counters[folder] || 0) + 1;
+          const ext = photo.imageUrl.split(".").pop()?.split("?")[0] || "jpg";
+          zipFiles[`${folder}/${sub}_${counters[folder]}.${ext}`] = new Uint8Array(buffer);
+          downloaded++;
+          if (downloaded % 5 === 0) toast({ title: `다운로드 중... ${downloaded}/${targetPhotos.length}` });
+        } catch { /* skip */ }
+      }
+
+      if (!Object.keys(zipFiles).length) { toast({ title: "다운로드할 사진이 없습니다", variant: "destructive" }); return; }
+      const zipped = zipSync(zipFiles);
+      const blob = new Blob([zipped], { type: "application/zip" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = url;
-      a.download = `photos.zip`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      a.href = url; a.download = zipName;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      toast({ title: "ZIP 다운로드가 시작되었습니다" });
+      toast({ title: `${downloaded}장 ZIP 다운로드 완료` });
     } catch (err: any) {
       toast({ title: "다운로드 실패", description: err.message, variant: "destructive" });
     } finally {
@@ -3306,29 +3323,11 @@ function PhotosTab({ projectId, currentPhase, project }: { projectId: string; cu
     }
   };
 
-  const handlePhaseDownloadZip = async (phase: string) => {
-    setDownloading(true);
-    try {
-      const res = await fetch(`${API_BASE}/api/projects/${projectId}/photos/download-zip/${phase}`, {
-        headers: { Authorization: `Bearer ${getAuthToken()}` },
-      });
-      if (!res.ok) throw new Error("다운로드 실패");
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      const phaseLabels: Record<string, string> = { DESIGN: "설계", PERMIT: "인허가", CONSTRUCTION: "시공", COMPLETION: "준공", PORTFOLIO: "포트폴리오" };
-      a.download = `photos_${phaseLabels[phase] || phase}.zip`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      toast({ title: "ZIP 다운로드가 시작되었습니다" });
-    } catch (err: any) {
-      toast({ title: "다운로드 실패", description: err.message, variant: "destructive" });
-    } finally {
-      setDownloading(false);
-    }
+  const handleDownloadZip = () => buildAndDownloadZip(photos ?? [], `${project.name}_photos.zip`);
+  const handlePhaseDownloadZip = (phase: string) => {
+    const phaseLabels: Record<string, string> = { DESIGN: "설계", PERMIT: "인허가", CONSTRUCTION: "시공", COMPLETION: "준공", PORTFOLIO: "포트폴리오" };
+    const filtered = photos?.filter((p) => p.phase === phase) ?? [];
+    buildAndDownloadZip(filtered, `${project.name}_${phaseLabels[phase] || phase}.zip`);
   };
 
   const phases = ["DESIGN", "PERMIT", "CONSTRUCTION", "COMPLETION", "PORTFOLIO"];
