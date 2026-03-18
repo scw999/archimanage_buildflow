@@ -950,7 +950,7 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
 
   const deleteChangeMutation = useMutation({
     mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/design-changes/${id}`); },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/design-changes`] }); toast({ title: "설계변경이 삭제되었습니다" }); setSelectedChange(null); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/design-changes`] }); toast({ title: "설계변경이 삭제되었습니다" }); },
   });
 
   const [editingChange, setEditingChange] = useState<DesignChange | null>(null);
@@ -1849,7 +1849,7 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
 
   const inspMutation = useMutation({
     mutationFn: async (data: any) => { await apiRequest("POST", `/api/projects/${projectId}/inspections`, data); },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/inspections`] }); toast({ title: "검수가 추가되었습니다" }); setInspDialogOpen(false); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/inspections`] }); toast({ title: "검수가 추가되었습니다" }); setInspDialogOpen(false); setNewInspAttachments([]); },
   });
 
   const updateInspMutation = useMutation({
@@ -1859,7 +1859,7 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
 
   const defectMutation = useMutation({
     mutationFn: async (data: any) => { await apiRequest("POST", `/api/projects/${projectId}/defects`, data); },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/defects`] }); toast({ title: "하자가 등록되었습니다" }); setDefectDialogOpen(false); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/defects`] }); toast({ title: "하자가 등록되었습니다" }); setDefectDialogOpen(false); setNewDefectAttachments([]); },
   });
 
   const updateDefectMutation = useMutation({
@@ -1875,6 +1875,8 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
   const [editingDefect, setEditingDefect] = useState<Defect | null>(null);
   const [editingCheck, setEditingCheck] = useState<DesignCheck | null>(null);
   const [editingInsp, setEditingInsp] = useState<Inspection | null>(null);
+  const [newDefectAttachments, setNewDefectAttachments] = useState<string[]>([]);
+  const [newInspAttachments, setNewInspAttachments] = useState<string[]>([]);
 
   const deleteInspMutation = useMutation({
     mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/inspections/${id}`); },
@@ -2178,7 +2180,7 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
                       onProgressChange={(v) => setLocalProgress((prev) => ({ ...prev, [task.id]: v }))}
                       onProgressCommit={(v) => updateTaskMutation.mutate({ id: task.id, data: { progress: v } })}
                       onStatusChange={(s) => updateTaskMutation.mutate({ id: task.id, data: { status: s } })}
-                      onEdit={() => { setEditTask(task); setExpandedTask(task.id); }}
+                      onEdit={() => setEditTask(task)}
                       onDelete={() => { if (confirm("이 공정을 삭제하시겠습니까?")) deleteTaskMutation.mutate(task.id); }}
                       onUpdateTask={(data) => updateTaskMutation.mutate({ id: task.id, data })}
                       photos={constructionPhotos}
@@ -2197,18 +2199,23 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="flex items-center gap-2"><Search className="w-5 h-5" /> 검수</CardTitle>
-          <Dialog open={inspDialogOpen} onOpenChange={setInspDialogOpen}>
+          <Dialog open={inspDialogOpen} onOpenChange={(o) => { setInspDialogOpen(o); if (!o) setNewInspAttachments([]); }}>
             <DialogTrigger asChild><Button size="sm"><Plus className="w-4 h-4 mr-1" />검수 추가</Button></DialogTrigger>
             <DialogContent>
               <DialogHeader><DialogTitle>검수 추가</DialogTitle></DialogHeader>
               <form onSubmit={(e) => {
                 e.preventDefault(); const fd = new FormData(e.currentTarget);
-                inspMutation.mutate({ title: fd.get("title"), category: fd.get("category"), scheduledDate: fd.get("scheduledDate") || null, inspector: fd.get("inspector") || null, result: "PENDING" });
+                inspMutation.mutate({ title: fd.get("title"), category: fd.get("category"), scheduledDate: fd.get("scheduledDate") || null, inspector: fd.get("inspector") || null, result: "PENDING", attachments: newInspAttachments.length ? JSON.stringify(newInspAttachments) : null });
               }} className="space-y-4">
                 <div className="space-y-2"><Label>검수명</Label><Input name="title" required /></div>
                 <div className="space-y-2"><Label>분류</Label><Input name="category" required placeholder="예: 구조검사, 방수검사" /></div>
                 <div className="space-y-2"><Label>예정일</Label><DateInput name="scheduledDate" /></div>
                 <div className="space-y-2"><Label>검사자</Label><Input name="inspector" /></div>
+                <div className="space-y-2">
+                  <Label>사진/파일 첨부</Label>
+                  <FileDropZone projectId={projectId} phase="CONSTRUCTION" subCategory="검수첨부" acceptFiles
+                    existingUrls={newInspAttachments} onUploaded={setNewInspAttachments} />
+                </div>
                 <Button type="submit" disabled={inspMutation.isPending}>추가</Button>
               </form>
             </DialogContent>
@@ -2268,13 +2275,13 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="flex items-center gap-2"><AlertTriangle className="w-5 h-5" /> 하자 관리</CardTitle>
-          <Dialog open={defectDialogOpen} onOpenChange={setDefectDialogOpen}>
+          <Dialog open={defectDialogOpen} onOpenChange={(o) => { setDefectDialogOpen(o); if (!o) setNewDefectAttachments([]); }}>
             <DialogTrigger asChild><Button size="sm"><Plus className="w-4 h-4 mr-1" />하자 등록</Button></DialogTrigger>
             <DialogContent>
               <DialogHeader><DialogTitle>하자 등록</DialogTitle></DialogHeader>
               <form onSubmit={(e) => {
                 e.preventDefault(); const fd = new FormData(e.currentTarget);
-                defectMutation.mutate({ title: fd.get("title"), description: fd.get("description"), location: fd.get("location"), severity: fd.get("severity"), status: "OPEN" });
+                defectMutation.mutate({ title: fd.get("title"), description: fd.get("description"), location: fd.get("location"), severity: fd.get("severity"), status: "OPEN", attachments: newDefectAttachments.length ? JSON.stringify(newDefectAttachments) : null });
               }} className="space-y-4">
                 <div className="space-y-2"><Label>제목</Label><Input name="title" required /></div>
                 <div className="space-y-2"><Label>설명</Label><Textarea name="description" required /></div>
@@ -2283,6 +2290,11 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
                   <select name="severity" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" defaultValue="MINOR">
                     <option value="CRITICAL">심각</option><option value="MAJOR">중대</option><option value="MINOR">경미</option><option value="COSMETIC">미관</option>
                   </select>
+                </div>
+                <div className="space-y-2">
+                  <Label>사진/파일 첨부</Label>
+                  <FileDropZone projectId={projectId} phase="CONSTRUCTION" subCategory="하자첨부" acceptFiles
+                    existingUrls={newDefectAttachments} onUploaded={setNewDefectAttachments} />
                 </div>
                 <Button type="submit" disabled={defectMutation.isPending}>등록</Button>
               </form>
@@ -2369,7 +2381,12 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
               </div>
               <div className="space-y-2">
                 <Label>첨부파일</Label>
-                {edAttachments.length > 0 && <AttachmentPreviewGrid attachments={edAttachments} />}
+                {edAttachments.length > 0 && (
+                  <AttachmentDisplay urls={edAttachments} onRemove={(idx) => {
+                    const next = edAttachments.filter((_, i) => i !== idx);
+                    updateDefectMutation.mutate({ id: editingDefect.id, data: { attachments: JSON.stringify(next) } });
+                  }} />
+                )}
                 <FileDropZone projectId={projectId} phase="CONSTRUCTION" subCategory="하자첨부" acceptFiles
                   existingUrls={[]}
                   onUploaded={(urls) => updateDefectMutation.mutate({ id: editingDefect.id, data: { attachments: JSON.stringify([...edAttachments, ...urls]) } })} />
@@ -2797,7 +2814,12 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
               <div className="space-y-2"><Label>메모</Label><Textarea name="memo" defaultValue={editingSchedule.memo || ""} /></div>
               <div className="space-y-2">
                 <Label>첨부파일</Label>
-                {esAttachments.length > 0 && <AttachmentPreviewGrid attachments={esAttachments} />}
+                {esAttachments.length > 0 && (
+                  <AttachmentDisplay urls={esAttachments} onRemove={(idx) => {
+                    const next = esAttachments.filter((_, i) => i !== idx);
+                    updateScheduleMutation.mutate({ id: editingSchedule.id, data: { attachments: JSON.stringify(next) } });
+                  }} />
+                )}
                 <FileDropZone projectId={projectId} phase={currentPhase} subCategory="일정첨부" acceptFiles
                   existingUrls={editSchedAttachments}
                   onUploaded={(urls) => {
@@ -2882,7 +2904,12 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
               </div>
               <div className="space-y-2">
                 <Label>첨부파일</Label>
-                {elAttachments.length > 0 && <AttachmentPreviewGrid attachments={elAttachments} />}
+                {elAttachments.length > 0 && (
+                  <AttachmentDisplay urls={elAttachments} onRemove={(idx) => {
+                    const next = elAttachments.filter((_, i) => i !== idx);
+                    updateLogMutation.mutate({ id: editingLog.id, data: { attachments: JSON.stringify(next) } });
+                  }} />
+                )}
                 <FileDropZone projectId={projectId} phase={currentPhase} subCategory="일지첨부" acceptFiles
                   existingUrls={[]}
                   onUploaded={(urls) => updateLogMutation.mutate({ id: editingLog.id, data: { attachments: JSON.stringify([...elAttachments, ...urls]) } })} />
