@@ -740,7 +740,20 @@ function OverviewTab({ project }: { project: Project }) {
 
       {/* 현재 진행 단계 */}
       <Card>
-        <CardHeader><CardTitle>현재 진행 단계</CardTitle></CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>현재 진행 단계</CardTitle>
+          <select
+            value={project.currentPhase}
+            onChange={(e) => updateMutation.mutate({ currentPhase: e.target.value })}
+            className="rounded-md border border-input bg-background px-3 py-1.5 text-sm font-medium"
+          >
+            <option value="DESIGN">설계</option>
+            <option value="PERMIT">인허가</option>
+            <option value="CONSTRUCTION">시공</option>
+            <option value="COMPLETION">준공</option>
+            <option value="PORTFOLIO">포트폴리오</option>
+          </select>
+        </CardHeader>
         <CardContent>
           <PhaseProgress currentPhase={project.currentPhase} />
         </CardContent>
@@ -928,6 +941,18 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
       toast({ title: "상태가 변경되었습니다" });
     },
   });
+
+  const updateChangeMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: any }) => { await apiRequest("PATCH", `/api/design-changes/${id}`, data); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/design-changes`] }); },
+  });
+
+  const deleteChangeMutation = useMutation({
+    mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/design-changes/${id}`); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/design-changes`] }); toast({ title: "설계변경이 삭제되었습니다" }); setSelectedChange(null); },
+  });
+
+  const [editingChange, setEditingChange] = useState<DesignChange | null>(null);
 
   const completedCount = designChecks?.filter((c) => c.isCompleted === 1).length ?? 0;
   const totalCount = designChecks?.length ?? 0;
@@ -1182,7 +1207,9 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
         </CardContent>
       </Card>
 
-      {selectedChange && (
+      {selectedChange && (() => {
+        const scAttachments: string[] = (selectedChange as any).attachments ? JSON.parse((selectedChange as any).attachments) : [];
+        return (
         <Dialog open onOpenChange={() => setSelectedChange(null)}>
           <DialogContent>
             <DialogHeader><DialogTitle>{selectedChange.title}</DialogTitle></DialogHeader>
@@ -1191,6 +1218,10 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
               <p className="text-sm">{selectedChange.description}</p>
               {selectedChange.reason && <p className="text-sm"><strong>사유:</strong> {selectedChange.reason}</p>}
               {selectedChange.impactArea && <p className="text-sm"><strong>영향 범위:</strong> {selectedChange.impactArea}</p>}
+              {scAttachments.length > 0 && <AttachmentPreviewGrid attachments={scAttachments} />}
+              <FileDropZone projectId={projectId} phase="DESIGN" subCategory="설계변경첨부" acceptFiles
+                existingUrls={[]}
+                onUploaded={(urls) => updateChangeMutation.mutate({ id: selectedChange.id, data: { attachments: JSON.stringify([...scAttachments, ...urls]) } })} />
               <div className="flex items-center gap-2">
                 <Label className="text-xs">상태 변경:</Label>
                 <select value={selectedChange.status}
@@ -1200,7 +1231,44 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
                   <option value="APPROVED">승인</option><option value="REJECTED">반려</option><option value="APPLIED">적용완료</option>
                 </select>
               </div>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => { setEditingChange(selectedChange); setSelectedChange(null); }}>
+                  <Pencil className="w-3 h-3 mr-1" />수정
+                </Button>
+                <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:text-destructive"
+                  onClick={() => { if (confirm("이 설계변경을 삭제하시겠습니까?")) deleteChangeMutation.mutate(selectedChange.id); }}>
+                  <Trash2 className="w-3 h-3 mr-1" />삭제
+                </Button>
+              </div>
             </div>
+          </DialogContent>
+        </Dialog>
+        );
+      })()}
+
+      {/* 설계변경 수정 다이얼로그 */}
+      {editingChange && (
+        <Dialog open onOpenChange={() => setEditingChange(null)}>
+          <DialogContent>
+            <DialogHeader><DialogTitle>설계변경 수정</DialogTitle></DialogHeader>
+            <form onSubmit={(e) => {
+              e.preventDefault(); const fd = new FormData(e.currentTarget);
+              updateChangeMutation.mutate({
+                id: editingChange.id,
+                data: {
+                  title: fd.get("title"), description: fd.get("description"),
+                  reason: fd.get("reason") || null, impactArea: fd.get("impactArea") || null,
+                },
+              });
+              setEditingChange(null);
+              toast({ title: "설계변경이 수정되었습니다" });
+            }} className="space-y-4">
+              <div className="space-y-2"><Label>제목</Label><Input name="title" required defaultValue={editingChange.title} /></div>
+              <div className="space-y-2"><Label>설명</Label><Textarea name="description" required defaultValue={editingChange.description} /></div>
+              <div className="space-y-2"><Label>변경 사유</Label><Input name="reason" defaultValue={editingChange.reason || ""} /></div>
+              <div className="space-y-2"><Label>영향 범위</Label><Input name="impactArea" defaultValue={editingChange.impactArea || ""} /></div>
+              <Button type="submit" className="w-full">저장</Button>
+            </form>
           </DialogContent>
         </Dialog>
       )}
@@ -1796,6 +1864,13 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/defects`] }); },
   });
 
+  const deleteDefectMutation = useMutation({
+    mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/defects/${id}`); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/defects`] }); toast({ title: "하자가 삭제되었습니다" }); },
+  });
+
+  const [editingDefect, setEditingDefect] = useState<Defect | null>(null);
+
   const sortedTasks = tasks ? [...tasks].sort((a, b) => a.sortOrder - b.sortOrder) : [];
   const constructionChecks = designChecks?.filter((c) => (c as any).phase === "CONSTRUCTION") ?? [];
   const linkedDesignChecks = designChecks?.filter((c) => ((c as any).phase === "DESIGN" || !(c as any).phase) && (c as any).linkedToConstruction === 1) ?? [];
@@ -2087,7 +2162,7 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
                       onProgressChange={(v) => setLocalProgress((prev) => ({ ...prev, [task.id]: v }))}
                       onProgressCommit={(v) => updateTaskMutation.mutate({ id: task.id, data: { progress: v } })}
                       onStatusChange={(s) => updateTaskMutation.mutate({ id: task.id, data: { status: s } })}
-                      onEdit={() => setEditTask(task)}
+                      onEdit={() => { setEditTask(task); setExpandedTask(task.id); }}
                       onDelete={() => { if (confirm("이 공정을 삭제하시겠습니까?")) deleteTaskMutation.mutate(task.id); }}
                       onUpdateTask={(data) => updateTaskMutation.mutate({ id: task.id, data })}
                       photos={constructionPhotos}
@@ -2197,20 +2272,36 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
             <p className="text-sm text-muted-foreground text-center py-4">등록된 하자가 없습니다</p>
           ) : (
             <div className="space-y-3">
-              {defects.map((defect) => (
+              {defects.map((defect) => {
+                const defAttachments: string[] = (defect as any).attachments ? JSON.parse((defect as any).attachments) : [];
+                return (
                 <div key={defect.id} className="p-3 rounded-lg border">
-                  <div className="cursor-pointer" onClick={() => setExpandedDefect(expandedDefect === defect.id ? null : defect.id)}>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-medium">{defect.title}</span>
-                      <Badge variant="outline" className={getDefectSeverityColor(defect.severity)}>{getDefectSeverityLabel(defect.severity)}</Badge>
-                      <Badge variant="outline">{getDefectStatusLabel(defect.status)}</Badge>
+                  <div className="flex items-start gap-2">
+                    <div className="flex-1 cursor-pointer" onClick={() => setExpandedDefect(expandedDefect === defect.id ? null : defect.id)}>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-medium">{defect.title}</span>
+                        <Badge variant="outline" className={getDefectSeverityColor(defect.severity)}>{getDefectSeverityLabel(defect.severity)}</Badge>
+                        <Badge variant="outline">{getDefectStatusLabel(defect.status)}</Badge>
+                        {defAttachments.length > 0 && <span className="text-xs text-muted-foreground"><Camera className="w-3 h-3 inline" /> {defAttachments.length}</span>}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">위치: {defect.location}</p>
+                      {defect.assignee && <p className="text-xs text-muted-foreground">담당: {defect.assignee}</p>}
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1">위치: {defect.location}</p>
-                    {defect.assignee && <p className="text-xs text-muted-foreground">담당: {defect.assignee}</p>}
+                    <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => setEditingDefect(defect)}>
+                      <Pencil className="w-3.5 h-3.5" />
+                    </Button>
                   </div>
+                  {/* Inline attachments when collapsed */}
+                  {expandedDefect !== defect.id && defAttachments.length > 0 && (
+                    <div className="mt-2"><AttachmentPreviewGrid attachments={defAttachments} /></div>
+                  )}
                   {expandedDefect === defect.id && (
                     <div className="mt-3 pt-3 border-t space-y-3">
                       <p className="text-sm">{defect.description}</p>
+                      {defAttachments.length > 0 && <AttachmentPreviewGrid attachments={defAttachments} />}
+                      <FileDropZone projectId={projectId} phase="CONSTRUCTION" subCategory="하자첨부" acceptFiles
+                        existingUrls={[]}
+                        onUploaded={(urls) => updateDefectMutation.mutate({ id: defect.id, data: { attachments: JSON.stringify([...defAttachments, ...urls]) } })} />
                       <div className="flex items-center gap-2">
                         <Label className="text-xs">상태:</Label>
                         <select value={defect.status} onChange={(e) => updateDefectMutation.mutate({ id: defect.id, data: { status: e.target.value } })}
@@ -2222,14 +2313,67 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
                       <div className="space-y-1"><Label className="text-xs">담당자</Label>
                         <Input defaultValue={defect.assignee || ""} onBlur={(e) => updateDefectMutation.mutate({ id: defect.id, data: { assignee: e.target.value || null } })} className="h-8 text-xs" />
                       </div>
+                      <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:text-destructive"
+                        onClick={() => { if (confirm("이 하자를 삭제하시겠습니까?")) deleteDefectMutation.mutate(defect.id); }}>
+                        <Trash2 className="w-3 h-3 mr-1" />삭제
+                      </Button>
                     </div>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>
       </Card>
+
+      {/* 하자 수정 다이얼로그 */}
+      {editingDefect && (() => {
+        const edAttachments: string[] = (editingDefect as any).attachments ? JSON.parse((editingDefect as any).attachments) : [];
+        return (
+        <Dialog open onOpenChange={() => setEditingDefect(null)}>
+          <DialogContent>
+            <DialogHeader><DialogTitle>하자 수정</DialogTitle></DialogHeader>
+            <form onSubmit={(e) => {
+              e.preventDefault(); const fd = new FormData(e.currentTarget);
+              updateDefectMutation.mutate({
+                id: editingDefect.id,
+                data: {
+                  title: fd.get("title"), description: fd.get("description"),
+                  location: fd.get("location"), severity: fd.get("severity"),
+                  assignee: fd.get("assignee") || null,
+                },
+              });
+              setEditingDefect(null);
+              toast({ title: "하자가 수정되었습니다" });
+            }} className="space-y-4">
+              <div className="space-y-2"><Label>제목</Label><Input name="title" required defaultValue={editingDefect.title} /></div>
+              <div className="space-y-2"><Label>설명</Label><Textarea name="description" required defaultValue={editingDefect.description} /></div>
+              <div className="space-y-2"><Label>위치</Label><Input name="location" required defaultValue={editingDefect.location} /></div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2"><Label>심각도</Label>
+                  <select name="severity" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" defaultValue={editingDefect.severity}>
+                    <option value="CRITICAL">심각</option><option value="MAJOR">중대</option><option value="MINOR">경미</option><option value="COSMETIC">미관</option>
+                  </select>
+                </div>
+                <div className="space-y-2"><Label>담당자</Label><Input name="assignee" defaultValue={editingDefect.assignee || ""} /></div>
+              </div>
+              <div className="space-y-2">
+                <Label>첨부파일</Label>
+                {edAttachments.length > 0 && <AttachmentPreviewGrid attachments={edAttachments} />}
+                <FileDropZone projectId={projectId} phase="CONSTRUCTION" subCategory="하자첨부" acceptFiles
+                  existingUrls={[]}
+                  onUploaded={(urls) => updateDefectMutation.mutate({ id: editingDefect.id, data: { attachments: JSON.stringify([...edAttachments, ...urls]) } })} />
+              </div>
+              <div className="flex gap-2">
+                <Button type="submit" className="flex-1">저장</Button>
+                <Button type="button" variant="destructive" onClick={() => { if (confirm("이 하자를 삭제하시겠습니까?")) { deleteDefectMutation.mutate(editingDefect.id); setEditingDefect(null); } }}>삭제</Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+        );
+      })()}
 
       {/* 건축주 요청사항 (시공 단계) */}
       <RequestsSection projectId={projectId} phase="CONSTRUCTION" />
@@ -2264,7 +2408,10 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
                 <div className="space-y-2"><Label>종료일</Label><DateInput name="endDate" defaultValue={editTask.endDate || ""} /></div>
               </div>
               <div className="space-y-2"><Label>담당</Label><Input name="assignee" defaultValue={editTask.assignee || ""} /></div>
-              <Button type="submit">저장</Button>
+              <div className="flex gap-2">
+                <Button type="submit" className="flex-1">저장</Button>
+                <Button type="button" variant="destructive" onClick={() => { if (confirm("이 공정을 삭제하시겠습니까?")) { deleteTaskMutation.mutate(editTask.id); setEditTask(null); } }}>삭제</Button>
+              </div>
             </form>
           </DialogContent>
         </Dialog>
@@ -2309,6 +2456,19 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
     mutationFn: async ({ id, data }: { id: string; data: any }) => { await apiRequest("PATCH", `/api/daily-logs/${id}`, data); },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/daily-logs`] }); },
   });
+
+  const deleteScheduleMutation = useMutation({
+    mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/schedules/${id}`); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/schedules`] }); toast({ title: "일정이 삭제되었습니다" }); setEditingSchedule(null); },
+  });
+
+  const deleteLogMutation = useMutation({
+    mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/daily-logs/${id}`); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/daily-logs`] }); toast({ title: "작업일지가 삭제되었습니다" }); },
+  });
+
+  const [editingLog, setEditingLog] = useState<DailyLog | null>(null);
+  const [editSchedAttachments, setEditSchedAttachments] = useState<string[]>([]);
 
   const presetData = selectedPreset ? SCHEDULE_PRESETS.find((p) => p.title === selectedPreset) : null;
 
@@ -2471,11 +2631,16 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
                 const isLogExpanded = expandedLog === log.id;
                 return (
                 <div key={log.id} className="p-3 rounded-lg border">
-                  <div className="flex items-center gap-3 mb-2 cursor-pointer" onClick={() => setExpandedLog(isLogExpanded ? null : log.id)}>
-                    <span className="text-sm font-medium">{log.date}</span>
-                    {log.weather && <span className="text-xs text-muted-foreground flex items-center gap-1"><Cloud className="w-3 h-3" />{log.weather}</span>}
-                    {log.workers != null && <span className="text-xs text-muted-foreground flex items-center gap-1"><Users className="w-3 h-3" />{log.workers}명</span>}
-                    {logAttachments.length > 0 && <span className="text-xs text-muted-foreground"><Camera className="w-3 h-3 inline" /> {logAttachments.length}</span>}
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="flex items-center gap-3 flex-1 cursor-pointer" onClick={() => setExpandedLog(isLogExpanded ? null : log.id)}>
+                      <span className="text-sm font-medium">{log.date}</span>
+                      {log.weather && <span className="text-xs text-muted-foreground flex items-center gap-1"><Cloud className="w-3 h-3" />{log.weather}</span>}
+                      {log.workers != null && <span className="text-xs text-muted-foreground flex items-center gap-1"><Users className="w-3 h-3" />{log.workers}명</span>}
+                      {logAttachments.length > 0 && <span className="text-xs text-muted-foreground"><Camera className="w-3 h-3 inline" /> {logAttachments.length}</span>}
+                    </div>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => setEditingLog(log)}>
+                      <Pencil className="w-3.5 h-3.5" />
+                    </Button>
                   </div>
                   <p className="text-sm">{log.content}</p>
                   {/* Inline attachments */}
@@ -2502,7 +2667,9 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
       </Card>
 
       {/* 일정 수정 다이얼로그 */}
-      {editingSchedule && (
+      {editingSchedule && (() => {
+        const esAttachments: string[] = (editingSchedule as any).attachments ? JSON.parse((editingSchedule as any).attachments) : [];
+        return (
         <Dialog open onOpenChange={() => setEditingSchedule(null)}>
           <DialogContent>
             <DialogHeader><DialogTitle>일정 수정</DialogTitle></DialogHeader>
@@ -2514,9 +2681,10 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
                   title: fd.get("title"), date: fd.get("date"),
                   category: fd.get("category"), memo: fd.get("memo") || null,
                   location: fd.get("location") || null, time: fd.get("time") || null,
+                  attachments: editSchedAttachments.length ? JSON.stringify(editSchedAttachments) : (editingSchedule as any).attachments,
                 },
               });
-              setEditingSchedule(null);
+              setEditingSchedule(null); setEditSchedAttachments([]);
             }} className="space-y-4">
               <div className="space-y-2"><Label>제목</Label><Input name="title" required defaultValue={editingSchedule.title} /></div>
               <div className="grid grid-cols-2 gap-4">
@@ -2537,11 +2705,25 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
                 </select>
               </div>
               <div className="space-y-2"><Label>메모</Label><Textarea name="memo" defaultValue={editingSchedule.memo || ""} /></div>
-              <Button type="submit" className="w-full">저장</Button>
+              <div className="space-y-2">
+                <Label>첨부파일</Label>
+                {esAttachments.length > 0 && <AttachmentPreviewGrid attachments={esAttachments} />}
+                <FileDropZone projectId={projectId} phase={currentPhase} subCategory="일정첨부" acceptFiles
+                  existingUrls={editSchedAttachments}
+                  onUploaded={(urls) => {
+                    setEditSchedAttachments(urls);
+                    updateScheduleMutation.mutate({ id: editingSchedule.id, data: { attachments: JSON.stringify([...esAttachments, ...urls]) } });
+                  }} />
+              </div>
+              <div className="flex gap-2">
+                <Button type="submit" className="flex-1">저장</Button>
+                <Button type="button" variant="destructive" onClick={() => { if (confirm("이 일정을 삭제하시겠습니까?")) deleteScheduleMutation.mutate(editingSchedule.id); }}>삭제</Button>
+              </div>
             </form>
           </DialogContent>
         </Dialog>
-      )}
+        );
+      })()}
 
       {/* 시간 선택 모달 */}
       {showTimePicker && (
@@ -2581,6 +2763,49 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
           </DialogContent>
         </Dialog>
       )}
+
+      {/* 작업일지 수정 다이얼로그 */}
+      {editingLog && (() => {
+        const elAttachments: string[] = (editingLog as any).attachments ? JSON.parse((editingLog as any).attachments) : [];
+        return (
+        <Dialog open onOpenChange={() => setEditingLog(null)}>
+          <DialogContent>
+            <DialogHeader><DialogTitle>작업일지 수정</DialogTitle></DialogHeader>
+            <form onSubmit={(e) => {
+              e.preventDefault(); const fd = new FormData(e.currentTarget);
+              updateLogMutation.mutate({
+                id: editingLog.id,
+                data: {
+                  date: fd.get("date"), content: fd.get("content"),
+                  weather: fd.get("weather") || null,
+                  workers: fd.get("workers") ? parseInt(fd.get("workers") as string) : null,
+                },
+              });
+              setEditingLog(null);
+              toast({ title: "작업일지가 수정되었습니다" });
+            }} className="space-y-4">
+              <div className="space-y-2"><Label>날짜</Label><DateInput name="date" required defaultValue={editingLog.date} /></div>
+              <div className="space-y-2"><Label>내용</Label><Textarea name="content" required defaultValue={editingLog.content} /></div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2"><Label>날씨</Label><Input name="weather" defaultValue={editingLog.weather || ""} /></div>
+                <div className="space-y-2"><Label>작업인원</Label><Input name="workers" type="number" defaultValue={editingLog.workers ?? ""} /></div>
+              </div>
+              <div className="space-y-2">
+                <Label>첨부파일</Label>
+                {elAttachments.length > 0 && <AttachmentPreviewGrid attachments={elAttachments} />}
+                <FileDropZone projectId={projectId} phase={currentPhase} subCategory="일지첨부" acceptFiles
+                  existingUrls={[]}
+                  onUploaded={(urls) => updateLogMutation.mutate({ id: editingLog.id, data: { attachments: JSON.stringify([...elAttachments, ...urls]) } })} />
+              </div>
+              <div className="flex gap-2">
+                <Button type="submit" className="flex-1">저장</Button>
+                <Button type="button" variant="destructive" onClick={() => { if (confirm("이 작업일지를 삭제하시겠습니까?")) deleteLogMutation.mutate(editingLog.id); setEditingLog(null); }}>삭제</Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+        );
+      })()}
     </div>
   );
 }
@@ -2589,11 +2814,22 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
 function FilesTab({ projectId, currentPhase }: { projectId: string; currentPhase: string }) {
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingFile, setEditingFile] = useState<ProjectFile | null>(null);
   const { data: files } = useQuery<ProjectFile[]>({ queryKey: [`/api/projects/${projectId}/files`] });
 
   const mutation = useMutation({
     mutationFn: async (data: any) => { await apiRequest("POST", `/api/projects/${projectId}/files`, data); },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/files`] }); toast({ title: "파일이 추가되었습니다" }); setDialogOpen(false); },
+  });
+
+  const updateFileMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: any }) => { await apiRequest("PATCH", `/api/files/${id}`, data); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/files`] }); toast({ title: "파일이 수정되었습니다" }); setEditingFile(null); },
+  });
+
+  const deleteFileMutation = useMutation({
+    mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/files/${id}`); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/files`] }); toast({ title: "파일이 삭제되었습니다" }); },
   });
 
   return (
@@ -2649,11 +2885,53 @@ function FilesTab({ projectId, currentPhase }: { projectId: string; currentPhase
                   <a href={getDownloadableUrl(f.url)} download target="_blank" rel="noopener noreferrer">
                     <Button variant="ghost" size="icon" className="h-8 w-8"><Download className="w-4 h-4" /></Button>
                   </a>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditingFile(f)}>
+                    <Pencil className="w-4 h-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive"
+                    onClick={() => { if (confirm("이 파일을 삭제하시겠습니까?")) deleteFileMutation.mutate(f.id); }}>
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
                 </div>
               </CardContent>
             </Card>
           ))}
         </div>
+      )}
+
+      {/* 파일 수정 다이얼로그 */}
+      {editingFile && (
+        <Dialog open onOpenChange={() => setEditingFile(null)}>
+          <DialogContent>
+            <DialogHeader><DialogTitle>파일 수정</DialogTitle></DialogHeader>
+            <form onSubmit={(e) => {
+              e.preventDefault(); const fd = new FormData(e.currentTarget);
+              updateFileMutation.mutate({
+                id: editingFile.id,
+                data: {
+                  title: fd.get("title"), url: fd.get("url"),
+                  category: fd.get("category"), version: fd.get("version") || null,
+                  description: fd.get("description") || null,
+                },
+              });
+            }} className="space-y-4">
+              <div className="space-y-2"><Label>제목</Label><Input name="title" required defaultValue={editingFile.title} /></div>
+              <div className="space-y-2"><Label>Google Drive URL</Label><Input name="url" type="url" required defaultValue={editingFile.url} /></div>
+              <div className="space-y-2"><Label>카테고리</Label>
+                <select name="category" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" defaultValue={editingFile.category}>
+                  <option value="DRAWING">도면</option><option value="STRUCTURAL">구조</option>
+                  <option value="INTERIOR">인테리어</option><option value="DOCUMENT">문서</option><option value="OTHER">기타</option>
+                </select>
+              </div>
+              <div className="space-y-2"><Label>버전</Label><Input name="version" defaultValue={editingFile.version || ""} /></div>
+              <div className="space-y-2"><Label>설명</Label><Textarea name="description" defaultValue={editingFile.description || ""} /></div>
+              <div className="flex gap-2">
+                <Button type="submit" className="flex-1" disabled={updateFileMutation.isPending}>저장</Button>
+                <Button type="button" variant="destructive" onClick={() => { if (confirm("이 파일을 삭제하시겠습니까?")) { deleteFileMutation.mutate(editingFile.id); setEditingFile(null); } }}>삭제</Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );
@@ -2802,6 +3080,31 @@ function PhotosTab({ projectId, currentPhase, project }: { projectId: string; cu
     }
   };
 
+  const handlePhaseDownloadZip = async (phase: string) => {
+    setDownloading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/projects/${projectId}/photos/download-zip/${phase}`, {
+        headers: { Authorization: `Bearer ${getAuthToken()}` },
+      });
+      if (!res.ok) throw new Error("다운로드 실패");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const phaseLabels: Record<string, string> = { DESIGN: "설계", PERMIT: "인허가", CONSTRUCTION: "시공", COMPLETION: "준공", PORTFOLIO: "포트폴리오" };
+      a.download = `photos_${phaseLabels[phase] || phase}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast({ title: "ZIP 다운로드가 시작되었습니다" });
+    } catch (err: any) {
+      toast({ title: "다운로드 실패", description: err.message, variant: "destructive" });
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   const phases = ["DESIGN", "PERMIT", "CONSTRUCTION", "COMPLETION", "PORTFOLIO"];
 
   // Dynamic sub-categories based on floor count
@@ -2849,9 +3152,27 @@ function PhotosTab({ projectId, currentPhase, project }: { projectId: string; cu
         </h3>
         <div className="flex gap-2">
           {totalPhotos > 0 && (
-            <Button size="sm" variant="outline" onClick={handleDownloadZip} disabled={downloading}>
-              {downloading ? "다운로드 중..." : "ZIP 다운로드"}
-            </Button>
+            <div className="flex gap-1">
+              <Button size="sm" variant="outline" onClick={handleDownloadZip} disabled={downloading}>
+                {downloading ? "다운로드 중..." : "전체 ZIP"}
+              </Button>
+              {totalByPhase("DESIGN") > 0 && (
+                <Button size="sm" variant="outline" disabled={downloading}
+                  onClick={() => handlePhaseDownloadZip("DESIGN")}>설계</Button>
+              )}
+              {totalByPhase("CONSTRUCTION") > 0 && (
+                <Button size="sm" variant="outline" disabled={downloading}
+                  onClick={() => handlePhaseDownloadZip("CONSTRUCTION")}>시공</Button>
+              )}
+              {totalByPhase("COMPLETION") > 0 && (
+                <Button size="sm" variant="outline" disabled={downloading}
+                  onClick={() => handlePhaseDownloadZip("COMPLETION")}>준공</Button>
+              )}
+              {totalByPhase("PORTFOLIO") > 0 && (
+                <Button size="sm" variant="outline" disabled={downloading}
+                  onClick={() => handlePhaseDownloadZip("PORTFOLIO")}>포트폴리오</Button>
+              )}
+            </div>
           )}
           <Dialog open={uploadDialogOpen} onOpenChange={(o) => { setUploadDialogOpen(o); if (!o) setPastedFiles([]); }}>
             <DialogTrigger asChild><Button size="sm"><Plus className="w-4 h-4 mr-1" />사진 업로드</Button></DialogTrigger>

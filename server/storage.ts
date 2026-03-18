@@ -43,15 +43,19 @@ export interface IStorage {
   getSchedulesByProject(projectId: string): Promise<Schedule[]>;
   createSchedule(schedule: InsertSchedule): Promise<Schedule>;
   updateSchedule(id: string, data: Partial<InsertSchedule>): Promise<Schedule | undefined>;
+  deleteSchedule(id: string): Promise<boolean>;
 
   // DailyLogs
   getDailyLogsByProject(projectId: string): Promise<DailyLog[]>;
   createDailyLog(log: InsertDailyLog): Promise<DailyLog>;
   updateDailyLog(id: string, data: Partial<InsertDailyLog>): Promise<DailyLog | undefined>;
+  deleteDailyLog(id: string): Promise<boolean>;
 
   // Files
   getFilesByProject(projectId: string): Promise<File[]>;
   createFile(file: InsertFile): Promise<File>;
+  updateFile(id: string, data: Partial<InsertFile>): Promise<File | undefined>;
+  deleteFile(id: string): Promise<boolean>;
 
   // Photos
   getPhotosByProject(projectId: string): Promise<Photo[]>;
@@ -74,6 +78,7 @@ export interface IStorage {
   getDesignChangesByProject(projectId: string): Promise<DesignChange[]>;
   createDesignChange(dc: InsertDesignChange): Promise<DesignChange>;
   updateDesignChange(id: string, data: Partial<InsertDesignChange>): Promise<DesignChange | undefined>;
+  deleteDesignChange(id: string): Promise<boolean>;
 
   // Design Checks
   getDesignChecksByProject(projectId: string): Promise<DesignCheck[]>;
@@ -95,6 +100,10 @@ export interface IStorage {
   getDefectsByProject(projectId: string): Promise<Defect[]>;
   createDefect(defect: InsertDefect): Promise<Defect>;
   updateDefect(id: string, data: Partial<InsertDefect>): Promise<Defect | undefined>;
+  deleteDefect(id: string): Promise<boolean>;
+
+  // Requests
+  deleteRequest(id: string): Promise<boolean>;
 }
 
 export class MemStorage implements IStorage {
@@ -488,6 +497,10 @@ export class MemStorage implements IStorage {
     return updated;
   }
 
+  async deleteSchedule(id: string): Promise<boolean> {
+    return this.schedules.delete(id);
+  }
+
   // DailyLogs
   async getDailyLogsByProject(projectId: string): Promise<DailyLog[]> {
     return Array.from(this.dailyLogs.values()).filter((l) => l.projectId === projectId);
@@ -508,6 +521,10 @@ export class MemStorage implements IStorage {
     return updated;
   }
 
+  async deleteDailyLog(id: string): Promise<boolean> {
+    return this.dailyLogs.delete(id);
+  }
+
   // Files
   async getFilesByProject(projectId: string): Promise<File[]> {
     return Array.from(this.files.values()).filter((f) => f.projectId === projectId);
@@ -518,6 +535,18 @@ export class MemStorage implements IStorage {
     const file: File = { id, version: null, description: null, createdBy: null, ...insertFile };
     this.files.set(id, file);
     return file;
+  }
+
+  async updateFile(id: string, data: Partial<InsertFile>): Promise<File | undefined> {
+    const file = this.files.get(id);
+    if (!file) return undefined;
+    const updated = { ...file, ...data };
+    this.files.set(id, updated);
+    return updated;
+  }
+
+  async deleteFile(id: string): Promise<boolean> {
+    return this.files.delete(id);
   }
 
   // Photos
@@ -604,6 +633,10 @@ export class MemStorage implements IStorage {
     return updated;
   }
 
+  async deleteDesignChange(id: string): Promise<boolean> {
+    return this.designChanges.delete(id);
+  }
+
   // Design Checks
   async getDesignChecksByProject(projectId: string): Promise<DesignCheck[]> {
     return Array.from(this.designChecks.values()).filter((dc) => dc.projectId === projectId);
@@ -686,6 +719,14 @@ export class MemStorage implements IStorage {
     const updated = { ...defect, ...data };
     this.defects.set(id, updated);
     return updated;
+  }
+
+  async deleteDefect(id: string): Promise<boolean> {
+    return this.defects.delete(id);
+  }
+
+  async deleteRequest(id: string): Promise<boolean> {
+    return this.clientRequests.delete(id);
   }
 }
 

@@ -276,4 +276,39 @@ export class PgStorage implements IStorage {
     const [row] = await db.update(defects).set(data).where(eq(defects.id, id)).returning();
     return row;
   }
+
+  async deleteSchedule(id: string): Promise<boolean> {
+    const result = await db.delete(schedules).where(eq(schedules.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async deleteDailyLog(id: string): Promise<boolean> {
+    const result = await db.delete(dailyLogs).where(eq(dailyLogs.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async updateFile(id: string, data: Partial<InsertFile>): Promise<File | undefined> {
+    const [row] = await db.update(files).set(data).where(eq(files.id, id)).returning();
+    return row;
+  }
+
+  async deleteFile(id: string): Promise<boolean> {
+    const result = await db.delete(files).where(eq(files.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async deleteDesignChange(id: string): Promise<boolean> {
+    const result = await db.delete(designChanges).where(eq(designChanges.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async deleteDefect(id: string): Promise<boolean> {
+    const result = await db.delete(defects).where(eq(defects.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async deleteRequest(id: string): Promise<boolean> {
+    const result = await db.delete(clientRequests).where(eq(clientRequests.id, id)).returning();
+    return result.length > 0;
+  }
 }

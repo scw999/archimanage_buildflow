@@ -12,10 +12,6 @@ import { uploadFile, getFileBuffer, isR2Enabled } from "./r2";
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 20 * 1024 * 1024 },
-  fileFilter: (_req, file, cb) => {
-    if (file.mimetype.startsWith("image/")) cb(null, true);
-    else cb(new Error("이미지 파일만 업로드 가능합니다") as any, false);
-  },
 });
 
 const JWT_SECRET = process.env.JWT_SECRET || "buildflow-dev-secret";
@@ -177,6 +173,12 @@ export async function registerRoutes(
     return res.json(schedule);
   });
 
+  app.delete("/api/schedules/:id", authMiddleware, async (req: Request, res: Response) => {
+    const success = await storage.deleteSchedule(req.params.id);
+    if (!success) return res.status(404).json({ message: "일정을 찾을 수 없습니다" });
+    return res.json({ ok: true });
+  });
+
   // Daily Logs
   app.get("/api/projects/:id/daily-logs", authMiddleware, async (req: Request, res: Response) => {
     const logs = await storage.getDailyLogsByProject(req.params.id);
@@ -195,6 +197,12 @@ export async function registerRoutes(
     return res.json(log);
   });
 
+  app.delete("/api/daily-logs/:id", authMiddleware, async (req: Request, res: Response) => {
+    const success = await storage.deleteDailyLog(req.params.id);
+    if (!success) return res.status(404).json({ message: "작업일지를 찾을 수 없습니다" });
+    return res.json({ ok: true });
+  });
+
   // Files
   app.get("/api/projects/:id/files", authMiddleware, async (req: Request, res: Response) => {
     const files = await storage.getFilesByProject(req.params.id);
@@ -205,6 +213,18 @@ export async function registerRoutes(
     const userId = (req as any).userId;
     const file = await storage.createFile({ ...req.body, projectId: req.params.id, createdBy: userId });
     return res.json(file);
+  });
+
+  app.patch("/api/files/:id", authMiddleware, async (req: Request, res: Response) => {
+    const file = await storage.updateFile(req.params.id, req.body);
+    if (!file) return res.status(404).json({ message: "파일을 찾을 수 없습니다" });
+    return res.json(file);
+  });
+
+  app.delete("/api/files/:id", authMiddleware, async (req: Request, res: Response) => {
+    const success = await storage.deleteFile(req.params.id);
+    if (!success) return res.status(404).json({ message: "파일을 찾을 수 없습니다" });
+    return res.json({ ok: true });
   });
 
   // Photos
@@ -510,6 +530,77 @@ export async function registerRoutes(
     const defect = await storage.updateDefect(req.params.id, req.body);
     if (!defect) return res.status(404).json({ message: "하자를 찾을 수 없습니다" });
     return res.json(defect);
+  });
+
+  app.delete("/api/defects/:id", authMiddleware, async (req: Request, res: Response) => {
+    const success = await storage.deleteDefect(req.params.id);
+    if (!success) return res.status(404).json({ message: "하자를 찾을 수 없습니다" });
+    return res.json({ ok: true });
+  });
+
+  app.delete("/api/design-changes/:id", authMiddleware, async (req: Request, res: Response) => {
+    const success = await storage.deleteDesignChange(req.params.id);
+    if (!success) return res.status(404).json({ message: "설계변경을 찾을 수 없습니다" });
+    return res.json({ ok: true });
+  });
+
+  app.delete("/api/requests/:id", authMiddleware, async (req: Request, res: Response) => {
+    const success = await storage.deleteRequest(req.params.id);
+    if (!success) return res.status(404).json({ message: "요청사항을 찾을 수 없습니다" });
+    return res.json({ ok: true });
+  });
+
+  // Phase-specific ZIP download
+  app.get("/api/projects/:id/photos/download-zip/:phase", authMiddleware, async (req: Request, res: Response) => {
+    const project = await storage.getProject(req.params.id);
+    if (!project) return res.status(404).json({ message: "프로젝트를 찾을 수 없습니다" });
+
+    const allPhotos = await storage.getPhotosByProject(req.params.id);
+    const photos = allPhotos.filter(p => p.phase === req.params.phase);
+    if (!photos.length) return res.status(404).json({ message: "해당 단계의 사진이 없습니다" });
+
+    const phaseLabels: Record<string, string> = {
+      DESIGN: "설계", PERMIT: "인허가", CONSTRUCTION: "시공",
+      COMPLETION: "준공", PORTFOLIO: "포트폴리오",
+    };
+
+    const phaseLabel = phaseLabels[req.params.phase] || req.params.phase;
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(project.name)}_${phaseLabel}.zip"`);
+
+    const archive = archiver("zip", { zlib: { level: 5 } });
+    archive.pipe(res);
+
+    const counters: Record<string, number> = {};
+    for (const photo of photos) {
+      const subFolder = (photo as any).subCategory || "기타";
+      counters[subFolder] = (counters[subFolder] || 0) + 1;
+
+      const date = photo.takenAt || new Date().toISOString().slice(0, 10);
+      const ext = path.extname(photo.imageUrl) || ".jpg";
+      const fileName = `${subFolder}_${date}_${counters[subFolder]}${ext}`;
+
+      if (photo.imageUrl.startsWith("/uploads/")) {
+        const filePath = path.join(process.cwd(), photo.imageUrl);
+        if (fs.existsSync(filePath)) {
+          archive.file(filePath, { name: `${subFolder}/${fileName}` });
+        }
+      } else if (photo.imageUrl.startsWith("/api/photos/file/")) {
+        const r2Key = photo.imageUrl.replace("/api/photos/file/", "");
+        const buffer = await getFileBuffer(r2Key);
+        if (buffer) archive.append(buffer, { name: `${subFolder}/${fileName}` });
+      } else {
+        try {
+          const response = await fetch(photo.imageUrl);
+          if (response.ok) {
+            const buffer = Buffer.from(await response.arrayBuffer());
+            archive.append(buffer, { name: `${subFolder}/${fileName}` });
+          }
+        } catch { /* Skip failed downloads */ }
+      }
+    }
+
+    await archive.finalize();
   });
 
   return httpServer;

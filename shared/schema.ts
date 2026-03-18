@@ -280,6 +280,7 @@ export const designChanges = pgTable("design_changes", {
   requestedBy: varchar("requested_by"),
   approvedBy: varchar("approved_by"),
   relatedFileId: varchar("related_file_id"),
+  attachments: text("attachments"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -293,6 +294,7 @@ export const insertDesignChangeSchema = createInsertSchema(designChanges).pick({
   requestedBy: true,
   approvedBy: true,
   relatedFileId: true,
+  attachments: true,
 });
 
 export type InsertDesignChange = z.infer<typeof insertDesignChangeSchema>;
@@ -415,6 +417,7 @@ export const defects = pgTable("defects", {
   status: text("status").notNull().$type<typeof DefectStatus[number]>(),
   reportedBy: varchar("reported_by"),
   assignee: text("assignee"),
+  attachments: text("attachments"),
   reportedAt: timestamp("reported_at").defaultNow(),
   resolvedAt: timestamp("resolved_at"),
 });
@@ -428,6 +431,7 @@ export const insertDefectSchema = createInsertSchema(defects).pick({
   status: true,
   reportedBy: true,
   assignee: true,
+  attachments: true,
 });
 
 export type InsertDefect = z.infer<typeof insertDefectSchema>;
