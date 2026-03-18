@@ -926,6 +926,11 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/design-checks`] }); },
   });
 
+  const deleteCheckMutation = useMutation({
+    mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/design-checks/${id}`); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/design-checks`] }); toast({ title: "체크리스트 항목이 삭제되었습니다" }); setEditingCheck(null); },
+  });
+
   const changeMutation = useMutation({
     mutationFn: async (data: any) => { await apiRequest("POST", `/api/projects/${projectId}/design-changes`, data); },
     onSuccess: () => {
@@ -1268,11 +1273,16 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
                   <AttachmentDisplay urls={ecAttachments} onRemove={(idx) => {
                     const next = ecAttachments.filter((_, i) => i !== idx);
                     updateChangeMutation.mutate({ id: editingChange.id, data: { attachments: JSON.stringify(next) } });
+                    setEditingChange({ ...editingChange, attachments: JSON.stringify(next) } as any);
                   }} compact />
                 )}
                 <FileDropZone projectId={projectId} phase="DESIGN" subCategory="설계변경첨부" acceptFiles
                   existingUrls={[]}
-                  onUploaded={(urls) => updateChangeMutation.mutate({ id: editingChange.id, data: { attachments: JSON.stringify([...ecAttachments, ...urls]) } })} />
+                  onUploaded={(urls) => {
+                    const newAtt = [...ecAttachments, ...urls];
+                    updateChangeMutation.mutate({ id: editingChange.id, data: { attachments: JSON.stringify(newAtt) } });
+                    setEditingChange({ ...editingChange, attachments: JSON.stringify(newAtt) } as any);
+                  }} />
               </div>
               <div className="flex gap-2">
                 <Button type="submit" className="flex-1">저장</Button>
@@ -1333,13 +1343,21 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
                   <AttachmentDisplay urls={ecAttachments} onRemove={(idx) => {
                     const next = ecAttachments.filter((_, i) => i !== idx);
                     toggleCheckMutation.mutate({ id: editingCheck.id, attachments: JSON.stringify(next) });
+                    setEditingCheck({ ...editingCheck, attachments: JSON.stringify(next) } as any);
                   }} compact />
                 )}
                 <FileDropZone projectId={projectId} phase="DESIGN" subCategory="체크리스트첨부" acceptFiles
                   existingUrls={[]}
-                  onUploaded={(urls) => toggleCheckMutation.mutate({ id: editingCheck.id, attachments: JSON.stringify([...ecAttachments, ...urls]) })} />
+                  onUploaded={(urls) => {
+                    const newAtt = [...ecAttachments, ...urls];
+                    toggleCheckMutation.mutate({ id: editingCheck.id, attachments: JSON.stringify(newAtt) });
+                    setEditingCheck({ ...editingCheck, attachments: JSON.stringify(newAtt) } as any);
+                  }} />
               </div>
-              <Button type="submit" className="w-full">저장</Button>
+              <div className="flex gap-2">
+                <Button type="submit" className="flex-1">저장</Button>
+                <Button type="button" variant="destructive" onClick={() => { if (confirm("이 체크리스트 항목을 삭제하시겠습니까?")) deleteCheckMutation.mutate(editingCheck.id); }}>삭제</Button>
+              </div>
             </form>
           </DialogContent>
         </Dialog>
@@ -1658,9 +1676,14 @@ function SortableTaskItem({ task, isExpanded, onToggle, progress, onProgressChan
               <>
                 {t.memo && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{t.memo}</p>}
                 {checklistItems.length > 0 && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    <ClipboardList className="w-3 h-3 inline mr-1" />체크리스트 {checklistItems.length}개
-                  </p>
+                  <div className="mt-1 space-y-0.5">
+                    {checklistItems.map((item: string, idx: number) => (
+                      <div key={idx} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <div className="w-3 h-3 rounded-sm border border-muted-foreground/40 shrink-0" />
+                        <span className="line-clamp-1">{item}</span>
+                      </div>
+                    ))}
+                  </div>
                 )}
                 {taskPhotos.length > 0 && (
                   <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5 mt-2">
@@ -2385,11 +2408,16 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
                   <AttachmentDisplay urls={edAttachments} onRemove={(idx) => {
                     const next = edAttachments.filter((_, i) => i !== idx);
                     updateDefectMutation.mutate({ id: editingDefect.id, data: { attachments: JSON.stringify(next) } });
+                    setEditingDefect({ ...editingDefect, attachments: JSON.stringify(next) } as any);
                   }} />
                 )}
                 <FileDropZone projectId={projectId} phase="CONSTRUCTION" subCategory="하자첨부" acceptFiles
                   existingUrls={[]}
-                  onUploaded={(urls) => updateDefectMutation.mutate({ id: editingDefect.id, data: { attachments: JSON.stringify([...edAttachments, ...urls]) } })} />
+                  onUploaded={(urls) => {
+                    const newAtt = [...edAttachments, ...urls];
+                    updateDefectMutation.mutate({ id: editingDefect.id, data: { attachments: JSON.stringify(newAtt) } });
+                    setEditingDefect({ ...editingDefect, attachments: JSON.stringify(newAtt) } as any);
+                  }} />
               </div>
               <div className="flex gap-2">
                 <Button type="submit" className="flex-1">저장</Button>
@@ -2424,13 +2452,21 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
                   <AttachmentDisplay urls={ckAttachments} onRemove={(idx) => {
                     const next = ckAttachments.filter((_, i) => i !== idx);
                     toggleCheckMutation.mutate({ id: editingCheck.id, attachments: JSON.stringify(next) });
+                    setEditingCheck({ ...editingCheck, attachments: JSON.stringify(next) } as any);
                   }} compact />
                 )}
                 <FileDropZone projectId={projectId} phase="CONSTRUCTION" subCategory="체크리스트첨부" acceptFiles
                   existingUrls={[]}
-                  onUploaded={(urls) => toggleCheckMutation.mutate({ id: editingCheck.id, attachments: JSON.stringify([...ckAttachments, ...urls]) })} />
+                  onUploaded={(urls) => {
+                    const newAtt = [...ckAttachments, ...urls];
+                    toggleCheckMutation.mutate({ id: editingCheck.id, attachments: JSON.stringify(newAtt) });
+                    setEditingCheck({ ...editingCheck, attachments: JSON.stringify(newAtt) } as any);
+                  }} />
               </div>
-              <Button type="submit" className="w-full">저장</Button>
+              <div className="flex gap-2">
+                <Button type="submit" className="flex-1">저장</Button>
+                <Button type="button" variant="destructive" onClick={() => { if (confirm("이 체크리스트 항목을 삭제하시겠습니까?")) { apiRequest("DELETE", `/api/design-checks/${editingCheck.id}`).then(() => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/design-checks`] }); setEditingCheck(null); }); } }}>삭제</Button>
+              </div>
             </form>
           </DialogContent>
         </Dialog>
@@ -2482,11 +2518,16 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
                   <AttachmentDisplay urls={inspAttachments} onRemove={(idx) => {
                     const next = inspAttachments.filter((_, i) => i !== idx);
                     updateInspMutation.mutate({ id: editingInsp.id, data: { attachments: JSON.stringify(next) } });
+                    setEditingInsp({ ...editingInsp, attachments: JSON.stringify(next) } as any);
                   }} compact />
                 )}
                 <FileDropZone projectId={projectId} phase="CONSTRUCTION" subCategory="검수첨부" acceptFiles
                   existingUrls={[]}
-                  onUploaded={(urls) => updateInspMutation.mutate({ id: editingInsp.id, data: { attachments: JSON.stringify([...inspAttachments, ...urls]) } })} />
+                  onUploaded={(urls) => {
+                    const newAtt = [...inspAttachments, ...urls];
+                    updateInspMutation.mutate({ id: editingInsp.id, data: { attachments: JSON.stringify(newAtt) } });
+                    setEditingInsp({ ...editingInsp, attachments: JSON.stringify(newAtt) } as any);
+                  }} />
               </div>
               <div className="flex gap-2">
                 <Button type="submit" className="flex-1">저장</Button>
@@ -2818,6 +2859,7 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
                   <AttachmentDisplay urls={esAttachments} onRemove={(idx) => {
                     const next = esAttachments.filter((_, i) => i !== idx);
                     updateScheduleMutation.mutate({ id: editingSchedule.id, data: { attachments: JSON.stringify(next) } });
+                    setEditingSchedule({ ...editingSchedule, attachments: JSON.stringify(next) } as any);
                   }} />
                 )}
                 <FileDropZone projectId={projectId} phase={currentPhase} subCategory="일정첨부" acceptFiles
@@ -2825,6 +2867,7 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
                   onUploaded={(urls) => {
                     setEditSchedAttachments(urls);
                     updateScheduleMutation.mutate({ id: editingSchedule.id, data: { attachments: JSON.stringify([...esAttachments, ...urls]) } });
+                    setEditingSchedule({ ...editingSchedule, attachments: JSON.stringify([...esAttachments, ...urls]) } as any);
                   }} />
               </div>
               <div className="flex gap-2">
@@ -2908,11 +2951,16 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
                   <AttachmentDisplay urls={elAttachments} onRemove={(idx) => {
                     const next = elAttachments.filter((_, i) => i !== idx);
                     updateLogMutation.mutate({ id: editingLog.id, data: { attachments: JSON.stringify(next) } });
+                    setEditingLog({ ...editingLog, attachments: JSON.stringify(next) } as any);
                   }} />
                 )}
                 <FileDropZone projectId={projectId} phase={currentPhase} subCategory="일지첨부" acceptFiles
                   existingUrls={[]}
-                  onUploaded={(urls) => updateLogMutation.mutate({ id: editingLog.id, data: { attachments: JSON.stringify([...elAttachments, ...urls]) } })} />
+                  onUploaded={(urls) => {
+                    const newAtt = [...elAttachments, ...urls];
+                    updateLogMutation.mutate({ id: editingLog.id, data: { attachments: JSON.stringify(newAtt) } });
+                    setEditingLog({ ...editingLog, attachments: JSON.stringify(newAtt) } as any);
+                  }} />
               </div>
               <div className="flex gap-2">
                 <Button type="submit" className="flex-1">저장</Button>

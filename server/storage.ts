@@ -658,6 +658,10 @@ export class MemStorage implements IStorage {
     return updated;
   }
 
+  async deleteDesignCheck(id: string): Promise<boolean> {
+    return this.designChecks.delete(id);
+  }
+
   // Construction Tasks
   async getConstructionTasksByProject(projectId: string): Promise<ConstructionTask[]> {
     return Array.from(this.constructionTasks.values()).filter((ct) => ct.projectId === projectId);

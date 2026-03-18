@@ -308,7 +308,7 @@ export async function registerRoutes(
     };
 
     res.setHeader("Content-Type", "application/zip");
-    res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(project.name)}_photos.zip"`);
+    res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(project.name)}_photos.zip`);
 
     const archive = archiver("zip", { zlib: { level: 5 } });
     archive.pipe(res);
@@ -449,6 +449,12 @@ export async function registerRoutes(
     return res.json(check);
   });
 
+  app.delete("/api/design-checks/:id", authMiddleware, async (req: Request, res: Response) => {
+    const success = await storage.deleteDesignCheck(req.params.id);
+    if (!success) return res.status(404).json({ message: "체크리스트 항목을 찾을 수 없습니다" });
+    return res.json({ ok: true });
+  });
+
   // Construction Tasks
   app.get("/api/projects/:id/construction-tasks", authMiddleware, async (req: Request, res: Response) => {
     const tasks = await storage.getConstructionTasksByProject(req.params.id);
@@ -571,8 +577,9 @@ export async function registerRoutes(
     };
 
     const phaseLabel = phaseLabels[req.params.phase] || req.params.phase;
+    const safeFileName = `${encodeURIComponent(project.name)}_${encodeURIComponent(phaseLabel)}.zip`;
     res.setHeader("Content-Type", "application/zip");
-    res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(project.name)}_${phaseLabel}.zip"`);
+    res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${safeFileName}`);
 
     const archive = archiver("zip", { zlib: { level: 5 } });
     archive.pipe(res);
