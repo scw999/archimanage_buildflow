@@ -348,6 +348,20 @@ app.post("/api/projects/:id/files", async (c) => {
   return c.json(file);
 });
 
+app.patch("/api/files/:id", async (c) => {
+  const db = getDb(c);
+  const [file] = await db.update(schema.files).set(await c.req.json()).where(eq(schema.files.id, c.req.param("id"))).returning();
+  if (!file) return c.json({ message: "파일을 찾을 수 없습니다" }, 404);
+  return c.json(file);
+});
+
+app.delete("/api/files/:id", async (c) => {
+  const db = getDb(c);
+  const result = await db.delete(schema.files).where(eq(schema.files.id, c.req.param("id"))).returning();
+  if (!result.length) return c.json({ message: "파일을 찾을 수 없습니다" }, 404);
+  return c.json({ ok: true });
+});
+
 // --- Photos ---
 app.get("/api/projects/:id/photos", async (c) => {
   const db = getDb(c);
@@ -465,11 +479,15 @@ app.get("/api/projects/:id/photos/download-zip", async (c) => {
     try {
       let buffer: ArrayBuffer | null = null;
       if (photo.imageUrl.startsWith("/api/photos/file/")) {
-        const r2Key = photo.imageUrl.replace("/api/photos/file/", "");
+        const r2Key = photo.imageUrl.split("/api/photos/file/")[1];
+        const obj = await c.env.R2_BUCKET.get(r2Key);
+        if (obj) buffer = await obj.arrayBuffer();
+      } else if (photo.imageUrl.includes("/api/photos/file/")) {
+        const r2Key = photo.imageUrl.split("/api/photos/file/")[1];
         const obj = await c.env.R2_BUCKET.get(r2Key);
         if (obj) buffer = await obj.arrayBuffer();
       } else {
-        const res = await fetch(photo.imageUrl);
+        const res = await fetch(photo.imageUrl, { signal: AbortSignal.timeout(10000) });
         if (res.ok) buffer = await res.arrayBuffer();
       }
       if (buffer) zipFiles[`${folderPath}/${fileName}`] = new Uint8Array(buffer);
@@ -516,11 +534,15 @@ app.get("/api/projects/:id/photos/download-zip/:phase", async (c) => {
     try {
       let buffer: ArrayBuffer | null = null;
       if (photo.imageUrl.startsWith("/api/photos/file/")) {
-        const r2Key = photo.imageUrl.replace("/api/photos/file/", "");
+        const r2Key = photo.imageUrl.split("/api/photos/file/")[1];
+        const obj = await c.env.R2_BUCKET.get(r2Key);
+        if (obj) buffer = await obj.arrayBuffer();
+      } else if (photo.imageUrl.includes("/api/photos/file/")) {
+        const r2Key = photo.imageUrl.split("/api/photos/file/")[1];
         const obj = await c.env.R2_BUCKET.get(r2Key);
         if (obj) buffer = await obj.arrayBuffer();
       } else {
-        const res = await fetch(photo.imageUrl);
+        const res = await fetch(photo.imageUrl, { signal: AbortSignal.timeout(10000) });
         if (res.ok) buffer = await res.arrayBuffer();
       }
       if (buffer) zipFiles[`${subFolder}/${fileName}`] = new Uint8Array(buffer);

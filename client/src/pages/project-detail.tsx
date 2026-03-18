@@ -897,6 +897,7 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
   const { toast } = useToast();
   const [checkDialogOpen, setCheckDialogOpen] = useState(false);
   const [changeDialogOpen, setChangeDialogOpen] = useState(false);
+  const [newChangeAttachments, setNewChangeAttachments] = useState<string[]>([]);
   // selectedChange removed - edit/delete now inline via pencil icon
   const [showAllFloors, setShowAllFloors] = useState(false);
   const [designLightbox, setDesignLightbox] = useState<string | null>(null);
@@ -943,6 +944,7 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
       queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/design-changes`] });
       toast({ title: "설계변경이 등록되었습니다" });
       setChangeDialogOpen(false);
+      setNewChangeAttachments([]);
     },
   });
 
@@ -1178,7 +1180,7 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>설계변경 이력</CardTitle>
-          <Dialog open={changeDialogOpen} onOpenChange={setChangeDialogOpen}>
+          <Dialog open={changeDialogOpen} onOpenChange={(open) => { setChangeDialogOpen(open); if (!open) setNewChangeAttachments([]); }}>
             <DialogTrigger asChild>
               <Button size="sm"><Plus className="w-4 h-4 mr-1" />설계변경 등록</Button>
             </DialogTrigger>
@@ -1190,12 +1192,19 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
                 changeMutation.mutate({
                   title: fd.get("title"), description: fd.get("description"),
                   reason: fd.get("reason") || null, impactArea: fd.get("impactArea") || null, status: "REQUESTED",
+                  attachments: newChangeAttachments.length ? JSON.stringify(newChangeAttachments) : null,
                 });
               }} className="space-y-4">
                 <div className="space-y-2"><Label>제목</Label><Input name="title" required /></div>
                 <div className="space-y-2"><Label>설명</Label><Textarea name="description" required /></div>
                 <div className="space-y-2"><Label>변경 사유</Label><Input name="reason" /></div>
                 <div className="space-y-2"><Label>영향 범위</Label><Input name="impactArea" placeholder="예: 1층 거실, 외부 마감" /></div>
+                <div className="space-y-2">
+                  <Label>첨부파일</Label>
+                  <FileDropZone projectId={projectId} phase="DESIGN" subCategory="설계변경첨부" acceptFiles
+                    existingUrls={newChangeAttachments}
+                    onUploaded={(urls) => setNewChangeAttachments(urls)} />
+                </div>
                 <Button type="submit" disabled={changeMutation.isPending}>등록</Button>
               </form>
             </DialogContent>
@@ -1590,11 +1599,15 @@ function RequestsSection({ projectId, phase }: { projectId: string; phase: strin
                   <AttachmentDisplay urls={erAttachments} onRemove={(idx) => {
                     const next = erAttachments.filter((_, i) => i !== idx);
                     updateRequestMutation.mutate({ id: editingReq.id, data: { attachments: JSON.stringify(next) } });
+                    setEditingReq({ ...editingReq, attachments: JSON.stringify(next) } as any);
                   }} compact />
                 )}
                 <FileDropZone projectId={projectId} phase={phase} subCategory="요청첨부" acceptFiles
                   existingUrls={[]}
-                  onUploaded={(urls) => updateRequestMutation.mutate({ id: editingReq.id, data: { attachments: JSON.stringify([...erAttachments, ...urls]) } })} />
+                  onUploaded={(urls) => {
+                    updateRequestMutation.mutate({ id: editingReq.id, data: { attachments: JSON.stringify([...erAttachments, ...urls]) } });
+                    setEditingReq({ ...editingReq, attachments: JSON.stringify([...erAttachments, ...urls]) } as any);
+                  }} />
               </div>
               <div className="flex gap-2">
                 <Button type="submit" className="flex-1">저장</Button>
@@ -2895,7 +2908,7 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
                 <FileDropZone projectId={projectId} phase={currentPhase} subCategory="일정첨부" acceptFiles
                   existingUrls={editSchedAttachments}
                   onUploaded={(urls) => {
-                    setEditSchedAttachments(urls);
+                    setEditSchedAttachments([...editSchedAttachments, ...urls]);
                     updateScheduleMutation.mutate({ id: editingSchedule.id, data: { attachments: JSON.stringify([...esAttachments, ...urls]) } });
                     setEditingSchedule({ ...editingSchedule, attachments: JSON.stringify([...esAttachments, ...urls]) } as any);
                   }} />
