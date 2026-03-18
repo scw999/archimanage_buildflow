@@ -446,6 +446,7 @@ app.get("/api/photos/file/:key", async (c) => {
   const headers = new Headers();
   headers.set("Content-Type", obj.httpMetadata?.contentType || "image/jpeg");
   headers.set("Cache-Control", "public, max-age=31536000");
+  headers.set("Access-Control-Allow-Origin", "*");
   return new Response(obj.body, { headers });
 });
 
@@ -500,6 +501,7 @@ app.get("/api/projects/:id/photos/download-zip", async (c) => {
     headers: {
       "Content-Type": "application/zip",
       "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
+      "Access-Control-Allow-Origin": "*",
     },
   });
 });
@@ -556,6 +558,7 @@ app.get("/api/projects/:id/photos/download-zip/:phase", async (c) => {
     headers: {
       "Content-Type": "application/zip",
       "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
+      "Access-Control-Allow-Origin": "*",
     },
   });
 });
