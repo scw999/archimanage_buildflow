@@ -290,12 +290,13 @@ export const inspections = sqliteTable("inspections", {
   result: text("result").notNull(),
   inspector: text("inspector"),
   findings: text("findings"),
+  attachments: text("attachments"),
   createdBy: text("created_by"),
 });
 
 export const insertInspectionSchema = createInsertSchema(inspections).pick({
   projectId: true, title: true, category: true, scheduledDate: true,
-  completedDate: true, result: true, inspector: true, findings: true, createdBy: true,
+  completedDate: true, result: true, inspector: true, findings: true, attachments: true, createdBy: true,
 });
 export type InsertInspection = z.infer<typeof insertInspectionSchema>;
 export type Inspection = typeof inspections.$inferSelect;
@@ -311,13 +312,14 @@ export const defects = sqliteTable("defects", {
   status: text("status").notNull(),
   reportedBy: text("reported_by"),
   assignee: text("assignee"),
+  attachments: text("attachments"),
   reportedAt: text("reported_at").$defaultFn(() => new Date().toISOString()),
   resolvedAt: text("resolved_at"),
 });
 
 export const insertDefectSchema = createInsertSchema(defects).pick({
   projectId: true, title: true, description: true, location: true,
-  severity: true, status: true, reportedBy: true, assignee: true,
+  severity: true, status: true, reportedBy: true, assignee: true, attachments: true,
 });
 export type InsertDefect = z.infer<typeof insertDefectSchema>;
 export type Defect = typeof defects.$inferSelect;

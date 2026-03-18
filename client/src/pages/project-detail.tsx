@@ -1621,7 +1621,11 @@ function SortableTaskItem({ task, isExpanded, onToggle, progress, onProgressChan
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
 
   const t = task as any;
-  const checklistItems: string[] = t.checklist ? JSON.parse(t.checklist) : [];
+  const checklistItems: { text: string; checked: boolean }[] = t.checklist
+    ? JSON.parse(t.checklist).map((item: any) =>
+        typeof item === "string" ? { text: item, checked: false } : item
+      )
+    : [];
   const taskPhotos = photos.filter((p) => (p as any).subCategory === task.category || (p as any).subCategory === task.title);
   const [uploading, setUploading] = useState(false);
 
@@ -1683,10 +1687,20 @@ function SortableTaskItem({ task, isExpanded, onToggle, progress, onProgressChan
                 {t.memo && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{t.memo}</p>}
                 {checklistItems.length > 0 && (
                   <div className="mt-1 space-y-0.5">
-                    {checklistItems.map((item: string, idx: number) => (
+                    {checklistItems.map((item, idx) => (
                       <div key={idx} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <div className="w-3 h-3 rounded-sm border border-muted-foreground/40 shrink-0" />
-                        <span className="line-clamp-1">{item}</span>
+                        <input
+                          type="checkbox"
+                          checked={item.checked}
+                          onChange={() => {
+                            const next = checklistItems.map((ci, i) =>
+                              i === idx ? { ...ci, checked: !ci.checked } : ci
+                            );
+                            onUpdateTask({ checklist: JSON.stringify(next) });
+                          }}
+                          className="w-3 h-3 shrink-0 cursor-pointer"
+                        />
+                        <span className={`line-clamp-1 ${item.checked ? "line-through opacity-60" : ""}`}>{item.text}</span>
                       </div>
                     ))}
                   </div>
@@ -1737,12 +1751,22 @@ function SortableTaskItem({ task, isExpanded, onToggle, progress, onProgressChan
               <div className="space-y-1">
                 <Label className="text-xs">체크리스트</Label>
                 <div className="space-y-1">
-                  {checklistItems.map((item: string, idx: number) => (
+                  {checklistItems.map((item, idx) => (
                     <div key={idx} className="flex items-center gap-2">
-                      <input type="checkbox" className="w-3.5 h-3.5" />
-                      <span className="text-xs flex-1">{item}</span>
+                      <input
+                        type="checkbox"
+                        checked={item.checked}
+                        onChange={() => {
+                          const next = checklistItems.map((ci, i) =>
+                            i === idx ? { ...ci, checked: !ci.checked } : ci
+                          );
+                          onUpdateTask({ checklist: JSON.stringify(next) });
+                        }}
+                        className="w-3.5 h-3.5 cursor-pointer"
+                      />
+                      <span className={`text-xs flex-1 ${item.checked ? "line-through text-muted-foreground" : ""}`}>{item.text}</span>
                       <button className="text-xs text-muted-foreground hover:text-destructive" onClick={() => {
-                        const next = checklistItems.filter((_: string, i: number) => i !== idx);
+                        const next = checklistItems.filter((_, i) => i !== idx);
                         onUpdateTask({ checklist: JSON.stringify(next) });
                       }}><X className="w-3 h-3" /></button>
                     </div>
@@ -1752,7 +1776,7 @@ function SortableTaskItem({ task, isExpanded, onToggle, progress, onProgressChan
                   e.preventDefault(); const fd = new FormData(e.currentTarget);
                   const item = (fd.get("item") as string)?.trim();
                   if (!item) return;
-                  const next = [...checklistItems, item];
+                  const next = [...checklistItems, { text: item, checked: false }];
                   onUpdateTask({ checklist: JSON.stringify(next) });
                   e.currentTarget.reset();
                 }} className="flex gap-1">

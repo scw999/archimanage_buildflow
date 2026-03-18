@@ -291,6 +291,13 @@ app.patch("/api/schedules/:id", async (c) => {
   return c.json(schedule);
 });
 
+app.delete("/api/schedules/:id", async (c) => {
+  const db = getDb(c);
+  const result = await db.delete(schema.schedules).where(eq(schema.schedules.id, c.req.param("id"))).returning();
+  if (!result.length) return c.json({ message: "일정을 찾을 수 없습니다" }, 404);
+  return c.json({ ok: true });
+});
+
 // --- Daily Logs ---
 app.get("/api/projects/:id/daily-logs", async (c) => {
   const db = getDb(c);
@@ -308,6 +315,13 @@ app.patch("/api/daily-logs/:id", async (c) => {
   const [log] = await db.update(schema.dailyLogs).set(await c.req.json()).where(eq(schema.dailyLogs.id, c.req.param("id"))).returning();
   if (!log) return c.json({ message: "작업일지를 찾을 수 없습니다" }, 404);
   return c.json(log);
+});
+
+app.delete("/api/daily-logs/:id", async (c) => {
+  const db = getDb(c);
+  const result = await db.delete(schema.dailyLogs).where(eq(schema.dailyLogs.id, c.req.param("id"))).returning();
+  if (!result.length) return c.json({ message: "작업일지를 찾을 수 없습니다" }, 404);
+  return c.json({ ok: true });
 });
 
 // --- Files ---
@@ -451,10 +465,63 @@ app.get("/api/projects/:id/photos/download-zip", async (c) => {
   }
 
   const zipped = zipSync(zipFiles);
+  const filename = `${project.name}_photos.zip`;
   return new Response(zipped, {
     headers: {
       "Content-Type": "application/zip",
-      "Content-Disposition": `attachment; filename="${encodeURIComponent(project.name)}_photos.zip"`,
+      "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
+    },
+  });
+});
+
+// --- Photo ZIP Download (per phase) ---
+app.get("/api/projects/:id/photos/download-zip/:phase", async (c) => {
+  const db = getDb(c);
+  const [project] = await db.select().from(schema.projects).where(eq(schema.projects.id, c.req.param("id")));
+  if (!project) return c.json({ message: "프로젝트를 찾을 수 없습니다" }, 404);
+
+  const phase = c.req.param("phase");
+  const allPhotos = await db.select().from(schema.photos).where(eq(schema.photos.projectId, c.req.param("id")));
+  const photoList = allPhotos.filter((p) => p.phase === phase);
+  if (!photoList.length) return c.json({ message: "해당 단계의 사진이 없습니다" }, 404);
+
+  const phaseLabels: Record<string, string> = {
+    DESIGN: "01_설계", PERMIT: "02_인허가", CONSTRUCTION: "03_시공",
+    COMPLETION: "04_준공", PORTFOLIO: "05_포트폴리오",
+  };
+
+  const zipFiles: Record<string, Uint8Array> = {};
+  const counters: Record<string, number> = {};
+
+  for (const photo of photoList) {
+    const subFolder = photo.subCategory || "기타";
+    counters[subFolder] = (counters[subFolder] || 0) + 1;
+
+    const date = photo.takenAt || new Date().toISOString().slice(0, 10);
+    const ext = photo.imageUrl.split(".").pop() || "jpg";
+    const fileName = `${subFolder}_${date}_${counters[subFolder]}.${ext}`;
+
+    try {
+      let buffer: ArrayBuffer | null = null;
+      if (photo.imageUrl.startsWith("/api/photos/file/")) {
+        const r2Key = photo.imageUrl.replace("/api/photos/file/", "");
+        const obj = await c.env.R2_BUCKET.get(r2Key);
+        if (obj) buffer = await obj.arrayBuffer();
+      } else {
+        const res = await fetch(photo.imageUrl);
+        if (res.ok) buffer = await res.arrayBuffer();
+      }
+      if (buffer) zipFiles[`${subFolder}/${fileName}`] = new Uint8Array(buffer);
+    } catch { /* skip failed */ }
+  }
+
+  const zipped = zipSync(zipFiles);
+  const phaseLabel = phaseLabels[phase] || phase;
+  const filename = `${project.name}_${phaseLabel}_photos.zip`;
+  return new Response(zipped, {
+    headers: {
+      "Content-Type": "application/zip",
+      "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
     },
   });
 });
@@ -518,6 +585,13 @@ app.patch("/api/design-changes/:id", async (c) => {
   return c.json(change);
 });
 
+app.delete("/api/design-changes/:id", async (c) => {
+  const db = getDb(c);
+  const result = await db.delete(schema.designChanges).where(eq(schema.designChanges.id, c.req.param("id"))).returning();
+  if (!result.length) return c.json({ message: "설계변경을 찾을 수 없습니다" }, 404);
+  return c.json({ ok: true });
+});
+
 // --- Design Checks ---
 app.get("/api/projects/:id/design-checks", async (c) => {
   const db = getDb(c);
@@ -535,6 +609,13 @@ app.patch("/api/design-checks/:id", async (c) => {
   const [check] = await db.update(schema.designChecks).set(await c.req.json()).where(eq(schema.designChecks.id, c.req.param("id"))).returning();
   if (!check) return c.json({ message: "체크리스트 항목을 찾을 수 없습니다" }, 404);
   return c.json(check);
+});
+
+app.delete("/api/design-checks/:id", async (c) => {
+  const db = getDb(c);
+  const result = await db.delete(schema.designChecks).where(eq(schema.designChecks.id, c.req.param("id"))).returning();
+  if (!result.length) return c.json({ message: "체크리스트 항목을 찾을 수 없습니다" }, 404);
+  return c.json({ ok: true });
 });
 
 // --- Construction Tasks ---
@@ -605,6 +686,13 @@ app.patch("/api/inspections/:id", async (c) => {
   return c.json(insp);
 });
 
+app.delete("/api/inspections/:id", async (c) => {
+  const db = getDb(c);
+  const result = await db.delete(schema.inspections).where(eq(schema.inspections.id, c.req.param("id"))).returning();
+  if (!result.length) return c.json({ message: "검수 항목을 찾을 수 없습니다" }, 404);
+  return c.json({ ok: true });
+});
+
 // --- Defects ---
 app.get("/api/projects/:id/defects", async (c) => {
   const db = getDb(c);
@@ -622,6 +710,13 @@ app.patch("/api/defects/:id", async (c) => {
   const [defect] = await db.update(schema.defects).set(await c.req.json()).where(eq(schema.defects.id, c.req.param("id"))).returning();
   if (!defect) return c.json({ message: "하자를 찾을 수 없습니다" }, 404);
   return c.json(defect);
+});
+
+app.delete("/api/defects/:id", async (c) => {
+  const db = getDb(c);
+  const result = await db.delete(schema.defects).where(eq(schema.defects.id, c.req.param("id"))).returning();
+  if (!result.length) return c.json({ message: "하자를 찾을 수 없습니다" }, 404);
+  return c.json({ ok: true });
 });
 
 export default app;
