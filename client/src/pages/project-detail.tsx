@@ -898,6 +898,7 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
   const [checkDialogOpen, setCheckDialogOpen] = useState(false);
   const [changeDialogOpen, setChangeDialogOpen] = useState(false);
   const [newChangeAttachments, setNewChangeAttachments] = useState<string[]>([]);
+  const [newCheckAttachments, setNewCheckAttachments] = useState<string[]>([]);
   // selectedChange removed - edit/delete now inline via pencil icon
   const [showAllFloors, setShowAllFloors] = useState(false);
   const [designLightbox, setDesignLightbox] = useState<string | null>(null);
@@ -915,7 +916,7 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/design-checks`] });
       toast({ title: "체크리스트 항목이 추가되었습니다" });
-      setCheckDialogOpen(false);
+      setCheckDialogOpen(false); setNewCheckAttachments([]);
     },
   });
 
@@ -1082,7 +1083,7 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
           <CardTitle className="flex items-center gap-2">
             <CheckCircle2 className="w-5 h-5" /> 설계 체크리스트 ({completedCount}/{totalCount} 완료)
           </CardTitle>
-          <Dialog open={checkDialogOpen} onOpenChange={setCheckDialogOpen}>
+          <Dialog open={checkDialogOpen} onOpenChange={(o) => { setCheckDialogOpen(o); if (!o) setNewCheckAttachments([]); }}>
             <DialogTrigger asChild>
               <Button size="sm"><Plus className="w-4 h-4 mr-1" />추가</Button>
             </DialogTrigger>
@@ -1095,6 +1096,7 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
                   phase: "DESIGN", category: fd.get("category"), title: fd.get("title"),
                   memo: fd.get("memo") || null,
                   linkedToConstruction: fd.get("linkedToConstruction") ? 1 : 0,
+                  attachments: newCheckAttachments.length ? JSON.stringify(newCheckAttachments) : null,
                 });
               }} className="space-y-4">
                 <div className="space-y-2">
@@ -1120,6 +1122,11 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
                   <input type="checkbox" name="linkedToConstruction" value="1" className="w-4 h-4" />
                   <span className="text-sm">시공 단계 체크리스트에도 자동 생성</span>
                 </label>
+                <div className="space-y-2">
+                  <Label>사진/파일 첨부</Label>
+                  <FileDropZone projectId={projectId} phase="DESIGN" subCategory="체크리스트첨부" acceptFiles
+                    existingUrls={newCheckAttachments} onUploaded={setNewCheckAttachments} />
+                </div>
                 <Button type="submit" disabled={checkMutation.isPending}>추가</Button>
               </form>
             </DialogContent>
@@ -1901,7 +1908,7 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
 
   const checkMutation = useMutation({
     mutationFn: async (data: any) => { await apiRequest("POST", `/api/projects/${projectId}/design-checks`, data); },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/design-checks`] }); toast({ title: "체크리스트 항목이 추가되었습니다" }); setCheckDialogOpen(false); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/design-checks`] }); toast({ title: "체크리스트 항목이 추가되었습니다" }); setCheckDialogOpen(false); setNewConCheckAttachments([]); },
   });
 
   const toggleCheckMutation = useMutation({
@@ -1942,6 +1949,7 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
   const [editingCheck, setEditingCheck] = useState<DesignCheck | null>(null);
   const [editingInsp, setEditingInsp] = useState<Inspection | null>(null);
   const [newDefectAttachments, setNewDefectAttachments] = useState<string[]>([]);
+  const [newConCheckAttachments, setNewConCheckAttachments] = useState<string[]>([]);
   const [newInspAttachments, setNewInspAttachments] = useState<string[]>([]);
 
   const deleteInspMutation = useMutation({
@@ -2040,13 +2048,13 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
               {constructionChecks.filter((c) => c.isCompleted === 1).length}/{constructionChecks.length + linkedDesignChecks.length}
             </span>
           </CardTitle>
-          <Dialog open={checkDialogOpen} onOpenChange={setCheckDialogOpen}>
+          <Dialog open={checkDialogOpen} onOpenChange={(o) => { setCheckDialogOpen(o); if (!o) setNewConCheckAttachments([]); }}>
             <DialogTrigger asChild><Button size="sm"><Plus className="w-4 h-4 mr-1" />추가</Button></DialogTrigger>
             <DialogContent>
               <DialogHeader><DialogTitle>시공 체크리스트 항목 추가</DialogTitle></DialogHeader>
               <form onSubmit={(e) => {
                 e.preventDefault(); const fd = new FormData(e.currentTarget);
-                checkMutation.mutate({ phase: "CONSTRUCTION", category: fd.get("category"), title: fd.get("title"), memo: fd.get("memo") || null });
+                checkMutation.mutate({ phase: "CONSTRUCTION", category: fd.get("category"), title: fd.get("title"), memo: fd.get("memo") || null, attachments: newConCheckAttachments.length ? JSON.stringify(newConCheckAttachments) : null });
               }} className="space-y-4">
                 <div className="space-y-2"><Label>공종 카테고리</Label>
                   <select name="category" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" defaultValue="기초">
@@ -2055,6 +2063,11 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
                 </div>
                 <div className="space-y-2"><Label>항목명</Label><Input name="title" required /></div>
                 <div className="space-y-2"><Label>메모</Label><Textarea name="memo" /></div>
+                <div className="space-y-2">
+                  <Label>사진/파일 첨부</Label>
+                  <FileDropZone projectId={projectId} phase="CONSTRUCTION" subCategory="체크리스트첨부" acceptFiles
+                    existingUrls={newConCheckAttachments} onUploaded={setNewConCheckAttachments} />
+                </div>
                 <Button type="submit" disabled={checkMutation.isPending}>추가</Button>
               </form>
             </DialogContent>
