@@ -246,8 +246,11 @@ export async function registerRoutes(
   });
 
   app.delete("/api/photos/:id", authMiddleware, async (req: Request, res: Response) => {
-    const success = await storage.deletePhoto(req.params.id);
-    if (!success) return res.status(404).json({ message: "사진을 찾을 수 없습니다" });
+    const photo = await storage.getPhoto(req.params.id);
+    if (!photo) return res.status(404).json({ message: "사진을 찾을 수 없습니다" });
+    // Remove URL from all attachments referencing this photo
+    if (photo.imageUrl) await storage.removeUrlFromAllAttachments(photo.imageUrl);
+    await storage.deletePhoto(req.params.id);
     return res.json({ ok: true });
   });
 

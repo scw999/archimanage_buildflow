@@ -321,4 +321,22 @@ export class PgStorage implements IStorage {
     const result = await db.delete(clientRequests).where(eq(clientRequests.id, id)).returning();
     return result.length > 0;
   }
+
+  async removeUrlFromAllAttachments(imageUrl: string): Promise<void> {
+    const tables = [schedules, dailyLogs, designChanges, designChecks, clientRequests, inspections, defects] as const;
+    for (const tbl of tables) {
+      const rows = await db.select().from(tbl);
+      for (const row of rows) {
+        const att = (row as any).attachments;
+        if (!att) continue;
+        try {
+          const urls: string[] = JSON.parse(att);
+          if (!Array.isArray(urls) || !urls.includes(imageUrl)) continue;
+          const filtered = urls.filter((u: string) => u !== imageUrl);
+          await db.update(tbl as any).set({ attachments: filtered.length ? JSON.stringify(filtered) : null } as any)
+            .where(eq((tbl as any).id, (row as any).id));
+        } catch { /* ignore */ }
+      }
+    }
+  }
 }

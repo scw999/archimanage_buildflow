@@ -47,6 +47,7 @@ function FileDropZone({ projectId, phase, subCategory, onUploaded, existingUrls 
       const uploaded = await res.json();
       const urls = uploaded.map((p: any) => p.imageUrl);
       onUploaded([...existingUrls, ...urls]);
+      queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/photos`] });
       toast({ title: `${files.length}개 첨부되었습니다` });
     } catch { toast({ title: "업로드 실패", variant: "destructive" }); }
     finally { setUploading(false); }
@@ -3321,7 +3322,18 @@ function PhotosTab({ projectId, currentPhase, project }: { projectId: string; cu
 
   const deletePhotoMutation = useMutation({
     mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/photos/${id}`); },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/photos`] }); toast({ title: "사진이 삭제되었습니다" }); setLightbox(null); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/photos`] });
+      // 서버에서 attachments 참조도 제거했으므로 관련 쿼리들도 갱신
+      queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/design-changes`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/design-checks`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/schedules`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/daily-logs`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/inspections`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/defects`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/client-requests`] });
+      toast({ title: "사진이 삭제되었습니다" }); setLightbox(null);
+    },
   });
 
   // File upload handler
@@ -3781,7 +3793,9 @@ export default function ProjectDetail() {
           </div>
         </div>
 
-        <Tabs defaultValue="overview" data-testid="project-tabs">
+        <Tabs defaultValue="overview" data-testid="project-tabs" onValueChange={(tab) => {
+          if (tab === "photos") queryClient.invalidateQueries({ queryKey: [`/api/projects/${project.id}/photos`] });
+        }}>
           <TabsList className="w-full justify-start overflow-x-auto">
             <TabsTrigger value="overview">개요</TabsTrigger>
             <TabsTrigger value="design">설계</TabsTrigger>

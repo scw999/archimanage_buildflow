@@ -105,6 +105,9 @@ export interface IStorage {
 
   // Requests
   deleteRequest(id: string): Promise<boolean>;
+
+  // Utility: remove a photo URL from all attachments across all tables
+  removeUrlFromAllAttachments(imageUrl: string): Promise<void>;
 }
 
 export class MemStorage implements IStorage {
@@ -736,6 +739,26 @@ export class MemStorage implements IStorage {
 
   async deleteRequest(id: string): Promise<boolean> {
     return this.clientRequests.delete(id);
+  }
+
+  async removeUrlFromAllAttachments(imageUrl: string): Promise<void> {
+    const maps = [
+      this.schedules, this.dailyLogs, this.designChanges,
+      this.designChecks, this.clientRequests, this.inspections, this.defects,
+    ];
+    for (const map of maps) {
+      for (const [id, entity] of map.entries()) {
+        const att = (entity as any).attachments;
+        if (!att) continue;
+        try {
+          const urls: string[] = JSON.parse(att);
+          if (!Array.isArray(urls) || !urls.includes(imageUrl)) continue;
+          const filtered = urls.filter((u: string) => u !== imageUrl);
+          (entity as any).attachments = filtered.length ? JSON.stringify(filtered) : null;
+          map.set(id, entity);
+        } catch { /* ignore */ }
+      }
+    }
   }
 }
 

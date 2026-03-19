@@ -116,6 +116,30 @@ async function cleanupAttachments(db: ReturnType<typeof getDb>, r2: R2Bucket, at
   }
 }
 
+// Helper: remove a photo URL from all attachments JSON across all tables
+async function removeUrlFromAllAttachments(db: ReturnType<typeof getDb>, imageUrl: string) {
+  const tables = [
+    schema.schedules, schema.dailyLogs, schema.designChanges,
+    schema.designChecks, schema.clientRequests, schema.inspections, schema.defects,
+  ] as const;
+  for (const tbl of tables) {
+    try {
+      const rows = await db.select().from(tbl);
+      for (const row of rows) {
+        const att = (row as any).attachments;
+        if (!att) continue;
+        try {
+          const urls: string[] = JSON.parse(att);
+          if (!Array.isArray(urls) || !urls.includes(imageUrl)) continue;
+          const filtered = urls.filter((u) => u !== imageUrl);
+          await db.update(tbl as any).set({ attachments: filtered.length ? JSON.stringify(filtered) : null } as any)
+            .where(eq((tbl as any).id, (row as any).id));
+        } catch { /* ignore parse errors */ }
+      }
+    } catch { /* ignore table errors */ }
+  }
+}
+
 // Helper: clean up single photo from R2
 async function cleanupPhotoR2(r2: R2Bucket, imageUrl: string) {
   const r2Key = imageUrl.includes("/api/photos/file/") ? imageUrl.split("/api/photos/file/")[1] : null;
@@ -419,6 +443,7 @@ app.delete("/api/photos/:id", async (c) => {
   const [photo] = await db.select().from(schema.photos).where(eq(schema.photos.id, c.req.param("id")));
   if (!photo) return c.json({ message: "사진을 찾을 수 없습니다" }, 404);
   await cleanupPhotoR2(c.env.R2_BUCKET, photo.imageUrl);
+  await removeUrlFromAllAttachments(db, photo.imageUrl);
   await db.delete(schema.photos).where(eq(schema.photos.id, c.req.param("id")));
   return c.json({ ok: true });
 });
