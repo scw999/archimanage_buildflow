@@ -339,4 +339,25 @@ export class PgStorage implements IStorage {
       }
     }
   }
+
+  async getPhotoByUrl(url: string): Promise<Photo | undefined> {
+    const [row] = await db.select().from(photos).where(eq(photos.imageUrl, url));
+    return row;
+  }
+
+  async isUrlReferencedInAttachments(url: string): Promise<boolean> {
+    const tables = [schedules, dailyLogs, designChanges, designChecks, clientRequests, inspections, defects] as const;
+    for (const tbl of tables) {
+      const rows = await db.select().from(tbl);
+      for (const row of rows) {
+        const att = (row as any).attachments;
+        if (!att) continue;
+        try {
+          const urls: string[] = JSON.parse(att);
+          if (Array.isArray(urls) && urls.includes(url)) return true;
+        } catch { /* ignore */ }
+      }
+    }
+    return false;
+  }
 }

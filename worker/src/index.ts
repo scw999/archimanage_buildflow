@@ -438,6 +438,34 @@ app.patch("/api/photos/:id", async (c) => {
   return c.json(photo);
 });
 
+// Delete orphan photo by URL (if no other entity references it)
+app.post("/api/photos/cleanup-url", async (c) => {
+  const db = getDb(c);
+  const { url } = await c.req.json();
+  if (!url) return c.json({ ok: true, deleted: false });
+  const [photo] = await db.select().from(schema.photos).where(eq(schema.photos.imageUrl, url));
+  if (!photo) return c.json({ ok: true, deleted: false });
+  // Check if any other entity still references this URL
+  const tables = [
+    schema.schedules, schema.dailyLogs, schema.designChanges,
+    schema.designChecks, schema.clientRequests, schema.inspections, schema.defects,
+  ] as const;
+  for (const tbl of tables) {
+    const rows = await db.select().from(tbl);
+    for (const row of rows) {
+      const att = (row as any).attachments;
+      if (!att) continue;
+      try {
+        const urls: string[] = JSON.parse(att);
+        if (Array.isArray(urls) && urls.includes(url)) return c.json({ ok: true, deleted: false });
+      } catch {}
+    }
+  }
+  await cleanupPhotoR2(c.env.R2_BUCKET, photo.imageUrl);
+  await db.delete(schema.photos).where(eq(schema.photos.id, photo.id));
+  return c.json({ ok: true, deleted: true });
+});
+
 app.delete("/api/photos/:id", async (c) => {
   const db = getDb(c);
   const [photo] = await db.select().from(schema.photos).where(eq(schema.photos.id, c.req.param("id")));

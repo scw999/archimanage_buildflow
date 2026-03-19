@@ -123,6 +123,11 @@ function FileDropZone({ projectId, phase, subCategory, onUploaded, existingUrls 
 // Backward compat alias
 const ImageDropZone = FileDropZone;
 
+// Cleanup orphan photo record after removing URL from attachments
+async function cleanupPhotoByUrl(url: string) {
+  try { await apiRequest("POST", "/api/photos/cleanup-url", { url }); } catch { /* ignore */ }
+}
+
 // ─── Reusable Attachment Display ────────────────────────────
 const isImageUrl = (url: string) => /\.(jpg|jpeg|png|gif|webp|svg|bmp)(\?|$)/i.test(url);
 const getFileNameFromUrl = (url: string) => {
@@ -1294,9 +1299,11 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
                 <Label>첨부파일</Label>
                 {ecAttachments.length > 0 && (
                   <AttachmentDisplay urls={ecAttachments} onRemove={(idx) => {
+                    const removedUrl = ecAttachments[idx];
                     const next = ecAttachments.filter((_, i) => i !== idx);
                     updateChangeMutation.mutate({ id: editingChange.id, data: { attachments: JSON.stringify(next) } });
                     setEditingChange({ ...editingChange, attachments: JSON.stringify(next) } as any);
+                    cleanupPhotoByUrl(removedUrl);
                   }} compact />
                 )}
                 <FileDropZone projectId={projectId} phase="DESIGN" subCategory="설계변경첨부" acceptFiles
@@ -1365,9 +1372,11 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
                 <Label>첨부파일</Label>
                 {ecAttachments.length > 0 && (
                   <AttachmentDisplay urls={ecAttachments} onRemove={(idx) => {
+                    const removedUrl = ecAttachments[idx];
                     const next = ecAttachments.filter((_, i) => i !== idx);
                     toggleCheckMutation.mutate({ id: editingCheck.id, attachments: JSON.stringify(next) });
                     setEditingCheck({ ...editingCheck, attachments: JSON.stringify(next) } as any);
+                    cleanupPhotoByUrl(removedUrl);
                   }} compact />
                 )}
                 <FileDropZone projectId={projectId} phase="DESIGN" subCategory="체크리스트첨부" acceptFiles
@@ -1686,9 +1695,11 @@ function RequestsSection({ projectId, phase }: { projectId: string; phase: strin
                 <Label>첨부파일</Label>
                 {erAttachments.length > 0 && (
                   <AttachmentDisplay urls={erAttachments} onRemove={(idx) => {
+                    const removedUrl = erAttachments[idx];
                     const next = erAttachments.filter((_, i) => i !== idx);
                     updateRequestMutation.mutate({ id: editingReq.id, data: { attachments: JSON.stringify(next) } });
                     setEditingReq({ ...editingReq, attachments: JSON.stringify(next) } as any);
+                    cleanupPhotoByUrl(removedUrl);
                   }} compact />
                 )}
                 <FileDropZone projectId={projectId} phase={phase} subCategory="요청첨부" acceptFiles
@@ -2544,9 +2555,11 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
                 <Label>첨부파일</Label>
                 {edAttachments.length > 0 && (
                   <AttachmentDisplay urls={edAttachments} onRemove={(idx) => {
+                    const removedUrl = edAttachments[idx];
                     const next = edAttachments.filter((_, i) => i !== idx);
                     updateDefectMutation.mutate({ id: editingDefect.id, data: { attachments: JSON.stringify(next) } });
                     setEditingDefect({ ...editingDefect, attachments: JSON.stringify(next) } as any);
+                    cleanupPhotoByUrl(removedUrl);
                   }} />
                 )}
                 <FileDropZone projectId={projectId} phase="CONSTRUCTION" subCategory="하자첨부" acceptFiles
@@ -2588,9 +2601,11 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
                 <Label>첨부파일</Label>
                 {ckAttachments.length > 0 && (
                   <AttachmentDisplay urls={ckAttachments} onRemove={(idx) => {
+                    const removedUrl = ckAttachments[idx];
                     const next = ckAttachments.filter((_, i) => i !== idx);
                     toggleCheckMutation.mutate({ id: editingCheck.id, attachments: JSON.stringify(next) });
                     setEditingCheck({ ...editingCheck, attachments: JSON.stringify(next) } as any);
+                    cleanupPhotoByUrl(removedUrl);
                   }} compact />
                 )}
                 <FileDropZone projectId={projectId} phase="CONSTRUCTION" subCategory="체크리스트첨부" acceptFiles
@@ -2654,9 +2669,11 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
                 <Label>첨부파일</Label>
                 {inspAttachments.length > 0 && (
                   <AttachmentDisplay urls={inspAttachments} onRemove={(idx) => {
+                    const removedUrl = inspAttachments[idx];
                     const next = inspAttachments.filter((_, i) => i !== idx);
                     updateInspMutation.mutate({ id: editingInsp.id, data: { attachments: JSON.stringify(next) } });
                     setEditingInsp({ ...editingInsp, attachments: JSON.stringify(next) } as any);
+                    cleanupPhotoByUrl(removedUrl);
                   }} compact />
                 )}
                 <FileDropZone projectId={projectId} phase="CONSTRUCTION" subCategory="검수첨부" acceptFiles
@@ -2995,9 +3012,11 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
                 <Label>첨부파일</Label>
                 {esAttachments.length > 0 && (
                   <AttachmentDisplay urls={esAttachments} onRemove={(idx) => {
+                    const removedUrl = esAttachments[idx];
                     const next = esAttachments.filter((_, i) => i !== idx);
                     updateScheduleMutation.mutate({ id: editingSchedule.id, data: { attachments: JSON.stringify(next) } });
                     setEditingSchedule({ ...editingSchedule, attachments: JSON.stringify(next) } as any);
+                    cleanupPhotoByUrl(removedUrl);
                   }} />
                 )}
                 <FileDropZone projectId={projectId} phase={currentPhase} subCategory="일정첨부" acceptFiles
@@ -3087,9 +3106,11 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
                 <Label>첨부파일</Label>
                 {elAttachments.length > 0 && (
                   <AttachmentDisplay urls={elAttachments} onRemove={(idx) => {
+                    const removedUrl = elAttachments[idx];
                     const next = elAttachments.filter((_, i) => i !== idx);
                     updateLogMutation.mutate({ id: editingLog.id, data: { attachments: JSON.stringify(next) } });
                     setEditingLog({ ...editingLog, attachments: JSON.stringify(next) } as any);
+                    cleanupPhotoByUrl(removedUrl);
                   }} />
                 )}
                 <FileDropZone projectId={projectId} phase={currentPhase} subCategory="일지첨부" acceptFiles

@@ -254,6 +254,19 @@ export async function registerRoutes(
     return res.json({ ok: true });
   });
 
+  // Delete orphan photo by URL (if no other entity references it)
+  app.post("/api/photos/cleanup-url", authMiddleware, async (req: Request, res: Response) => {
+    const { url } = req.body;
+    if (!url) return res.status(400).json({ message: "url required" });
+    const photo = await storage.getPhotoByUrl(url);
+    if (!photo) return res.json({ ok: true, deleted: false });
+    // Check if any other entity still references this URL
+    const referenced = await storage.isUrlReferencedInAttachments(url);
+    if (referenced) return res.json({ ok: true, deleted: false, reason: "still referenced" });
+    await storage.deletePhoto(photo.id);
+    return res.json({ ok: true, deleted: true });
+  });
+
   // Photo file upload (R2 or local)
   app.post("/api/projects/:id/photos/upload", authMiddleware, upload.array("photos", 10), async (req: Request, res: Response) => {
     const userId = (req as any).userId;

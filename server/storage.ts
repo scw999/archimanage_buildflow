@@ -106,8 +106,10 @@ export interface IStorage {
   // Requests
   deleteRequest(id: string): Promise<boolean>;
 
-  // Utility: remove a photo URL from all attachments across all tables
+  // Utility
   removeUrlFromAllAttachments(imageUrl: string): Promise<void>;
+  getPhotoByUrl(url: string): Promise<Photo | undefined>;
+  isUrlReferencedInAttachments(url: string): Promise<boolean>;
 }
 
 export class MemStorage implements IStorage {
@@ -759,6 +761,31 @@ export class MemStorage implements IStorage {
         } catch { /* ignore */ }
       }
     }
+  }
+
+  async getPhotoByUrl(url: string): Promise<Photo | undefined> {
+    for (const photo of this.photos.values()) {
+      if (photo.imageUrl === url) return photo;
+    }
+    return undefined;
+  }
+
+  async isUrlReferencedInAttachments(url: string): Promise<boolean> {
+    const maps = [
+      this.schedules, this.dailyLogs, this.designChanges,
+      this.designChecks, this.clientRequests, this.inspections, this.defects,
+    ];
+    for (const map of maps) {
+      for (const entity of map.values()) {
+        const att = (entity as any).attachments;
+        if (!att) continue;
+        try {
+          const urls: string[] = JSON.parse(att);
+          if (Array.isArray(urls) && urls.includes(url)) return true;
+        } catch { /* ignore */ }
+      }
+    }
+    return false;
   }
 }
 
