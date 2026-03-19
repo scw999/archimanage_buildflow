@@ -221,12 +221,14 @@ export const designChanges = sqliteTable("design_changes", {
   requestedBy: text("requested_by"),
   approvedBy: text("approved_by"),
   relatedFileId: text("related_file_id"),
+  attachments: text("attachments"),
   createdAt: text("created_at").$defaultFn(() => new Date().toISOString()),
 });
 
 export const insertDesignChangeSchema = createInsertSchema(designChanges).pick({
   projectId: true, title: true, description: true, reason: true,
   impactArea: true, status: true, requestedBy: true, approvedBy: true, relatedFileId: true,
+  attachments: true,
 });
 export type InsertDesignChange = z.infer<typeof insertDesignChangeSchema>;
 export type DesignChange = typeof designChanges.$inferSelect;

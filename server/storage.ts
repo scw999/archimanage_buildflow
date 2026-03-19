@@ -316,8 +316,8 @@ export class MemStorage implements IStorage {
 
     // Design Changes for proj-1
     const designChangeData: Array<Omit<DesignChange, "id">> = [
-      { projectId: proj1Id, title: "외벽 마감재 변경 (타일→적벽돌)", description: "외벽 마감재를 기존 타일에서 적벽돌로 변경. 건축주 요청에 따라 따뜻한 느낌의 외관으로 변경합니다.", reason: "건축주 선호도 반영 및 유지보수 용이성", impactArea: "외부 마감", status: "APPROVED", requestedBy: clientId, approvedBy: adminId, relatedFileId: "file-1", createdAt: new Date("2024-08-15") },
-      { projectId: proj1Id, title: "2층 창호 사이즈 변경", description: "2층 거실 창호를 기존 1800x2100에서 2400x2400으로 확대. 채광 극대화를 위한 변경.", reason: "채광 극대화 및 조망권 확보", impactArea: "2층 거실", status: "REVIEWING", requestedBy: clientId, approvedBy: null, relatedFileId: null, createdAt: new Date("2024-10-01") },
+      { projectId: proj1Id, title: "외벽 마감재 변경 (타일→적벽돌)", description: "외벽 마감재를 기존 타일에서 적벽돌로 변경. 건축주 요청에 따라 따뜻한 느낌의 외관으로 변경합니다.", reason: "건축주 선호도 반영 및 유지보수 용이성", impactArea: "외부 마감", status: "APPROVED", requestedBy: clientId, approvedBy: adminId, relatedFileId: "file-1", attachments: null, createdAt: new Date("2024-08-15") },
+      { projectId: proj1Id, title: "2층 창호 사이즈 변경", description: "2층 거실 창호를 기존 1800x2100에서 2400x2400으로 확대. 채광 극대화를 위한 변경.", reason: "채광 극대화 및 조망권 확보", impactArea: "2층 거실", status: "REVIEWING", requestedBy: clientId, approvedBy: null, relatedFileId: null, attachments: null, createdAt: new Date("2024-10-01") },
     ];
 
     designChangeData.forEach((dc, i) => {
@@ -621,7 +621,7 @@ export class MemStorage implements IStorage {
 
   async createDesignChange(insertDc: InsertDesignChange): Promise<DesignChange> {
     const id = randomUUID();
-    const dc: DesignChange = { id, createdAt: new Date(), reason: null, impactArea: null, requestedBy: null, approvedBy: null, relatedFileId: null, ...insertDc };
+    const dc: DesignChange = { id, createdAt: new Date(), reason: null, impactArea: null, requestedBy: null, approvedBy: null, relatedFileId: null, attachments: null, ...insertDc };
     this.designChanges.set(id, dc);
     return dc;
   }
