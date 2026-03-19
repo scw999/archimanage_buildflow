@@ -126,6 +126,7 @@ export async function autoMigrate() {
         requested_by VARCHAR,
         approved_by VARCHAR,
         related_file_id VARCHAR,
+        attachments TEXT,
         created_at TIMESTAMP DEFAULT NOW()
       );
       CREATE TABLE IF NOT EXISTS design_checks (
@@ -206,6 +207,9 @@ export async function autoMigrate() {
     for (const col of ["phase TEXT DEFAULT 'DESIGN'", "linked_to_construction INTEGER DEFAULT 0", "attachments TEXT"]) {
       try { await db.execute(sql.raw(`ALTER TABLE design_checks ADD COLUMN IF NOT EXISTS ${col}`)); } catch {}
     }
+    // Add attachments to design_changes
+    try { await db.execute(sql.raw(`ALTER TABLE design_changes ADD COLUMN IF NOT EXISTS attachments TEXT`)); } catch {}
+
     // Add attachments to client_requests
     try { await db.execute(sql.raw(`ALTER TABLE client_requests ADD COLUMN IF NOT EXISTS attachments TEXT`)); } catch {}
 
