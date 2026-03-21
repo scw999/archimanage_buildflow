@@ -666,7 +666,7 @@ function OverviewTab({ project }: { project: Project }) {
           <div>
             {project.coverImageUrl ? (
               <div className="relative rounded-lg overflow-hidden border mb-3">
-                <img src={project.coverImageUrl} alt="대표 사진" className="w-full max-h-72 object-contain bg-muted/30" />
+                <img src={project.coverImageUrl} alt="대표 사진" className="w-full object-contain bg-muted/30" style={{ maxHeight: "500px" }} />
                 <div className="absolute bottom-2 right-2">
                   <label className="bg-black/60 text-white text-xs px-2 py-1 rounded cursor-pointer hover:bg-black/80">
                     변경
