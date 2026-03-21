@@ -1732,6 +1732,8 @@ function SortableTaskItem({ task, isExpanded, onToggle, progress, onProgressChan
   const { toast } = useToast();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id, disabled: !reorderMode });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
+  const [showAllPhotos, setShowAllPhotos] = useState(false);
+  const PHOTO_PREVIEW_COUNT = 6;
 
   const t = task as any;
   const checklistItems: { text: string; checked: boolean }[] = t.checklist
@@ -1798,14 +1800,27 @@ function SortableTaskItem({ task, isExpanded, onToggle, progress, onProgressChan
                   </div>
                 )}
                 {taskPhotos.length > 0 && (
-                  <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5 mt-2">
-                    {taskPhotos.slice(0, 15).map((ph) => (
-                      <div key={ph.id} className="aspect-square rounded-lg overflow-hidden border">
-                        <img src={ph.imageUrl} alt="" className="w-full h-full object-cover" />
-                      </div>
-                    ))}
-                    {taskPhotos.length > 15 && <div className="aspect-square rounded-lg border flex items-center justify-center text-sm font-medium text-muted-foreground">+{taskPhotos.length - 15}</div>}
-                  </div>
+                  <>
+                    <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5 mt-2">
+                      {(showAllPhotos ? taskPhotos : taskPhotos.slice(0, PHOTO_PREVIEW_COUNT)).map((ph) => (
+                        <div key={ph.id} className="aspect-square rounded-lg overflow-hidden border">
+                          <img src={ph.imageUrl} alt="" className="w-full h-full object-cover" />
+                        </div>
+                      ))}
+                      {!showAllPhotos && taskPhotos.length > PHOTO_PREVIEW_COUNT && (
+                        <button onClick={() => setShowAllPhotos(true)}
+                          className="aspect-square rounded-lg border flex items-center justify-center text-sm font-medium text-primary hover:bg-muted/50 transition-colors">
+                          +{taskPhotos.length - PHOTO_PREVIEW_COUNT}
+                        </button>
+                      )}
+                    </div>
+                    {showAllPhotos && taskPhotos.length > PHOTO_PREVIEW_COUNT && (
+                      <button onClick={() => setShowAllPhotos(false)}
+                        className="text-xs text-primary hover:underline mt-1">
+                        접기
+                      </button>
+                    )}
+                  </>
                 )}
               </>
             )}
