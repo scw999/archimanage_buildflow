@@ -1740,27 +1740,6 @@ function SortableTaskItem({ task, isExpanded, onToggle, progress, onProgressChan
       )
     : [];
   const taskPhotos = photos.filter((p) => (p as any).subCategory === task.category || (p as any).subCategory === task.title);
-  const [uploading, setUploading] = useState(false);
-
-  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files?.length) return;
-    setUploading(true);
-    try {
-      const fd = new FormData();
-      for (const f of Array.from(files)) fd.append("photos", f);
-      fd.append("phase", "CONSTRUCTION");
-      fd.append("subCategory", task.category);
-      const res = await fetch(`${API_BASE}/api/projects/${projectId}/photos/upload`, {
-        method: "POST", headers: { Authorization: `Bearer ${getAuthToken()}` }, body: fd,
-      });
-      if (!res.ok) throw new Error("업로드 실패");
-      queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/photos`] });
-      toast({ title: "사진이 업로드되었습니다" });
-    } catch { toast({ title: "업로드 실패", variant: "destructive" }); }
-    finally { setUploading(false); e.target.value = ""; }
-  };
-
   return (
     <div ref={setNodeRef} style={style} className="p-3 rounded-lg border bg-background">
       <div className="flex items-start gap-2">
@@ -1900,13 +1879,7 @@ function SortableTaskItem({ task, isExpanded, onToggle, progress, onProgressChan
 
               {/* 사진 */}
               <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <Label className="text-xs">사진 ({taskPhotos.length})</Label>
-                  <label className="text-xs text-primary cursor-pointer hover:underline">
-                    {uploading ? "업로드 중..." : "사진 추가"}
-                    <input type="file" accept="image/*" multiple className="hidden" onChange={handlePhotoUpload} disabled={uploading} />
-                  </label>
-                </div>
+                <Label className="text-xs">사진 ({taskPhotos.length})</Label>
                 {taskPhotos.length > 0 && (
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     {taskPhotos.map((ph) => (
@@ -1916,6 +1889,8 @@ function SortableTaskItem({ task, isExpanded, onToggle, progress, onProgressChan
                     ))}
                   </div>
                 )}
+                <FileDropZone projectId={projectId} phase="CONSTRUCTION" subCategory={task.category}
+                  existingUrls={[]} onUploaded={() => {}} />
               </div>
             </div>
           )}
