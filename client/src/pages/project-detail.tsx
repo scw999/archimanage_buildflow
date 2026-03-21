@@ -413,7 +413,7 @@ const PHOTO_SUB_CATEGORIES: Record<string, string[]> = {
 function getCategoryLabel(cat: string) {
   const map: Record<string, string> = {
     MEETING: "회의", DEADLINE: "마감", INSPECTION: "검수", CONSTRUCTION: "시공",
-    DRAWING: "도면", STRUCTURAL: "구조", INTERIOR: "인테리어", DOCUMENT: "문서", OTHER: "기타",
+    DRAWING: "도면", STRUCTURAL: "구조", INTERIOR: "인테리어", MATERIAL_SHEET: "자재시트", DOCUMENT: "문서", OTHER: "기타",
   };
   return map[cat] ?? cat;
 }
@@ -948,6 +948,7 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
   const { data: files } = useQuery<ProjectFile[]>({ queryKey: [`/api/projects/${projectId}/files`] });
 
   const drawingFiles = files?.filter((f) => f.category === "DRAWING") ?? [];
+  const materialSheetFiles = files?.filter((f) => f.category === "MATERIAL_SHEET") ?? [];
 
   const checkMutation = useMutation({
     mutationFn: async (data: any) => { await apiRequest("POST", `/api/projects/${projectId}/design-checks`, data); },
@@ -1361,6 +1362,35 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
           ) : (
             <div className="space-y-2">
               {drawingFiles.map((f) => (
+                <div key={f.id} className="flex items-center gap-3 p-3 rounded-lg border">
+                  <FileText className="w-5 h-5 text-muted-foreground shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium truncate">{f.title}</span>
+                      {f.version && <Badge variant="default" className="text-xs">{f.version}</Badge>}
+                    </div>
+                    {f.description && <p className="text-xs text-muted-foreground mt-0.5">{f.description}</p>}
+                  </div>
+                  <a href={f.url} target="_blank" rel="noopener noreferrer" className="shrink-0">
+                    <Button variant="ghost" size="icon" className="h-8 w-8"><ExternalLink className="w-4 h-4" /></Button>
+                  </a>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* 자재 시트 관리 */}
+      <Card>
+        <CardHeader><CardTitle>자재 시트 관리</CardTitle></CardHeader>
+        <CardContent>
+          <p className="text-xs text-muted-foreground mb-3">파일 탭에서 카테고리를 "자재시트"로 선택하면 여기에 표시됩니다.</p>
+          {!materialSheetFiles.length ? (
+            <p className="text-sm text-muted-foreground text-center py-4">등록된 자재 시트가 없습니다</p>
+          ) : (
+            <div className="space-y-2">
+              {materialSheetFiles.map((f) => (
                 <div key={f.id} className="flex items-center gap-3 p-3 rounded-lg border">
                   <FileText className="w-5 h-5 text-muted-foreground shrink-0" />
                   <div className="flex-1 min-w-0">
@@ -3204,7 +3234,7 @@ function FilesTab({ projectId, currentPhase }: { projectId: string; currentPhase
               <div className="space-y-2"><Label>카테고리</Label>
                 <select name="category" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" defaultValue="DOCUMENT">
                   <option value="DRAWING">도면</option><option value="STRUCTURAL">구조</option>
-                  <option value="INTERIOR">인테리어</option><option value="DOCUMENT">문서</option><option value="OTHER">기타</option>
+                  <option value="INTERIOR">인테리어</option><option value="MATERIAL_SHEET">자재시트</option><option value="DOCUMENT">문서</option><option value="OTHER">기타</option>
                 </select>
               </div>
               <div className="space-y-2"><Label>버전</Label><Input name="version" placeholder="v1.0" /></div>
@@ -3272,7 +3302,7 @@ function FilesTab({ projectId, currentPhase }: { projectId: string; currentPhase
               <div className="space-y-2"><Label>카테고리</Label>
                 <select name="category" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" defaultValue={editingFile.category}>
                   <option value="DRAWING">도면</option><option value="STRUCTURAL">구조</option>
-                  <option value="INTERIOR">인테리어</option><option value="DOCUMENT">문서</option><option value="OTHER">기타</option>
+                  <option value="INTERIOR">인테리어</option><option value="MATERIAL_SHEET">자재시트</option><option value="DOCUMENT">문서</option><option value="OTHER">기타</option>
                 </select>
               </div>
               <div className="space-y-2"><Label>버전</Label><Input name="version" defaultValue={editingFile.version || ""} /></div>
