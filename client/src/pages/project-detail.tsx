@@ -215,7 +215,7 @@ import {
   MapPin, User, ExternalLink, Download, X,
   Cloud, Users, CheckCircle2, ClipboardList,
   HardHat, AlertTriangle, Search, MessageSquare,
-  FolderTree, ChevronDown, ChevronRight, Building2, Ruler, Layers, Trash2,
+  FolderTree, ChevronDown, ChevronRight, ChevronUp, Building2, Ruler, Layers, Trash2,
   GripVertical, Pencil, ArrowUpDown, Image as ImageIcon, Clock
 } from "lucide-react";
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
@@ -1809,17 +1809,19 @@ function SortableTaskItem({ task, isExpanded, onToggle, progress, onProgressChan
                       ))}
                       {!showAllPhotos && taskPhotos.length > PHOTO_PREVIEW_COUNT && (
                         <button onClick={() => setShowAllPhotos(true)}
-                          className="aspect-square rounded-lg border flex items-center justify-center text-sm font-medium text-primary hover:bg-muted/50 transition-colors">
-                          +{taskPhotos.length - PHOTO_PREVIEW_COUNT}
+                          className="aspect-square rounded-lg border flex flex-col items-center justify-center text-primary hover:bg-muted/50 transition-colors gap-0.5">
+                          <span className="text-lg font-semibold">+{taskPhotos.length - PHOTO_PREVIEW_COUNT}</span>
+                          <span className="text-[10px] text-muted-foreground">클릭하면 펼침</span>
+                        </button>
+                      )}
+                      {showAllPhotos && taskPhotos.length > PHOTO_PREVIEW_COUNT && (
+                        <button onClick={() => setShowAllPhotos(false)}
+                          className="aspect-square rounded-lg border flex flex-col items-center justify-center text-muted-foreground hover:bg-muted/50 transition-colors gap-0.5">
+                          <ChevronUp className="w-5 h-5" />
+                          <span className="text-xs font-medium">접기</span>
                         </button>
                       )}
                     </div>
-                    {showAllPhotos && taskPhotos.length > PHOTO_PREVIEW_COUNT && (
-                      <button onClick={() => setShowAllPhotos(false)}
-                        className="text-xs text-primary hover:underline mt-1">
-                        접기
-                      </button>
-                    )}
                   </>
                 )}
               </>
