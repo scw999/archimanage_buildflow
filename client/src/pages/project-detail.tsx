@@ -20,6 +20,31 @@ import { apiRequest, queryClient, getAuthToken } from "@/lib/queryClient";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
+// Image resize utility: resize image files before upload (max 1920px, 80% quality)
+const MAX_IMAGE_SIZE = 1920;
+const IMAGE_QUALITY = 0.8;
+async function resizeImageFile(file: File): Promise<File> {
+  if (!file.type.startsWith("image/") || file.type === "image/svg+xml") return file;
+  return new Promise((resolve) => {
+    const img = new window.Image();
+    img.onload = () => {
+      const { width, height } = img;
+      if (width <= MAX_IMAGE_SIZE && height <= MAX_IMAGE_SIZE) { resolve(file); return; }
+      const scale = Math.min(MAX_IMAGE_SIZE / width, MAX_IMAGE_SIZE / height);
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(width * scale);
+      canvas.height = Math.round(height * scale);
+      const ctx = canvas.getContext("2d")!;
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob((blob) => {
+        resolve(blob ? new File([blob], file.name, { type: "image/jpeg" }) : file);
+      }, "image/jpeg", IMAGE_QUALITY);
+    };
+    img.onerror = () => resolve(file);
+    img.src = URL.createObjectURL(file);
+  });
+}
+
 // Reusable drag & drop + paste + click file upload zone (images + files)
 function FileDropZone({ projectId, phase, subCategory, onUploaded, existingUrls = [], acceptImages = true, acceptFiles = true, children }: {
   projectId: string; phase: string; subCategory: string;
@@ -37,7 +62,8 @@ function FileDropZone({ projectId, phase, subCategory, onUploaded, existingUrls 
     setUploading(true);
     try {
       const fd = new FormData();
-      for (const f of files) fd.append("photos", f);
+      const resized = await Promise.all(files.map(resizeImageFile));
+      for (const f of resized) fd.append("photos", f);
       fd.append("phase", phase);
       fd.append("subCategory", subCategory);
       const res = await fetch(`${API_BASE}/api/projects/${projectId}/photos/upload`, {
@@ -3275,7 +3301,47 @@ function PhotosTab({ projectId, currentPhase, project }: { projectId: string; cu
   const [downloading, setDownloading] = useState(false);
   const [uploadPhase, setUploadPhase] = useState(currentPhase);
   const [pastedFiles, setPastedFiles] = useState<File[]>([]);
+  const [optimizing, setOptimizing] = useState(false);
+  const [optimizeProgress, setOptimizeProgress] = useState("");
   const { data: photos } = useQuery<Photo[]>({ queryKey: [`/api/projects/${projectId}/photos`] });
+
+  // 기존 사진 일괄 최적화 (클라이언트에서 리사이즈 → 재업로드)
+  const optimizeExistingPhotos = async () => {
+    if (!photos?.length) return;
+    const imagePhotos = photos.filter((p) => /\.(jpg|jpeg|png|webp|bmp)(\?|$)/i.test(p.imageUrl));
+    if (!imagePhotos.length) { toast({ title: "최적화할 이미지가 없습니다" }); return; }
+    if (!confirm(`${imagePhotos.length}장의 사진을 최적화합니다. 진행하시겠습니까?`)) return;
+    setOptimizing(true);
+    let done = 0, skipped = 0, optimized = 0;
+    for (const photo of imagePhotos) {
+      done++;
+      setOptimizeProgress(`${done}/${imagePhotos.length}`);
+      try {
+        const res = await fetch(photo.imageUrl);
+        const blob = await res.blob();
+        if (blob.size <= 500 * 1024) { skipped++; continue; } // 500KB 이하 스킵
+        const file = new File([blob], "photo.jpg", { type: blob.type });
+        const resized = await resizeImageFile(file);
+        if (resized.size >= blob.size) { skipped++; continue; } // 리사이즈 효과 없으면 스킵
+        // 재업로드
+        const fd = new FormData();
+        fd.append("photos", resized);
+        fd.append("phase", photo.phase);
+        fd.append("subCategory", (photo as any).subCategory || "");
+        const uploadRes = await fetch(`${API_BASE}/api/projects/${projectId}/photos/upload`, {
+          method: "POST", headers: { Authorization: `Bearer ${getAuthToken()}` }, body: fd,
+        });
+        if (uploadRes.ok) {
+          // 기존 photo 삭제
+          await apiRequest("DELETE", `/api/photos/${photo.id}`);
+          optimized++;
+        }
+      } catch { /* skip failed */ }
+    }
+    setOptimizing(false); setOptimizeProgress("");
+    queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/photos`] });
+    toast({ title: `최적화 완료: ${optimized}장 축소, ${skipped}장 스킵` });
+  };
 
   // Clipboard paste handler - accumulate up to 10 images
   const handlePaste = useCallback(async (e: ClipboardEvent) => {
@@ -3488,6 +3554,10 @@ function PhotosTab({ projectId, currentPhase, project }: { projectId: string; cu
         </h3>
         <div className="flex gap-2">
           {totalPhotos > 0 && (
+            <>
+            <Button size="sm" variant="outline" disabled={optimizing} onClick={optimizeExistingPhotos}>
+              {optimizing ? `최적화 중 ${optimizeProgress}` : "기존 사진 최적화"}
+            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button size="sm" variant="outline" disabled={downloading}>
@@ -3526,6 +3596,7 @@ function PhotosTab({ projectId, currentPhase, project }: { projectId: string; cu
                 )}
               </DropdownMenuContent>
             </DropdownMenu>
+            </>
           )}
           <Dialog open={uploadDialogOpen} onOpenChange={(o) => { setUploadDialogOpen(o); if (!o) setPastedFiles([]); }}>
             <DialogTrigger asChild><Button size="sm"><Plus className="w-4 h-4 mr-1" />사진 업로드</Button></DialogTrigger>
