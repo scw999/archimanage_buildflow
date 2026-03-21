@@ -1739,7 +1739,7 @@ function SortableTaskItem({ task, isExpanded, onToggle, progress, onProgressChan
         typeof item === "string" ? { text: item, checked: false } : item
       )
     : [];
-  const taskPhotos = photos.filter((p) => (p as any).subCategory === task.category || (p as any).subCategory === task.title);
+  const taskPhotos = photos.filter((p) => (p as any).subCategory === task.title || (p as any).subCategory === task.category);
   return (
     <div ref={setNodeRef} style={style} className="p-3 rounded-lg border bg-background">
       <div className="flex items-start gap-2">
@@ -1883,13 +1883,23 @@ function SortableTaskItem({ task, isExpanded, onToggle, progress, onProgressChan
                 {taskPhotos.length > 0 && (
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     {taskPhotos.map((ph) => (
-                      <div key={ph.id} className="aspect-[4/3] rounded-lg overflow-hidden border">
+                      <div key={ph.id} className="relative group aspect-[4/3] rounded-lg overflow-hidden border">
                         <img src={ph.imageUrl} alt="" className="w-full h-full object-cover" />
+                        <Button variant="destructive" size="icon"
+                          className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={async () => {
+                            if (!confirm("이 사진을 삭제하시겠습니까?")) return;
+                            await apiRequest("DELETE", `/api/photos/${ph.id}`);
+                            queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/photos`] });
+                            toast({ title: "사진이 삭제되었습니다" });
+                          }}>
+                          <X className="w-3 h-3" />
+                        </Button>
                       </div>
                     ))}
                   </div>
                 )}
-                <FileDropZone projectId={projectId} phase="CONSTRUCTION" subCategory={task.category}
+                <FileDropZone projectId={projectId} phase="CONSTRUCTION" subCategory={task.title}
                   existingUrls={[]} onUploaded={() => {}} />
               </div>
             </div>
