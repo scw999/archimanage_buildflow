@@ -106,8 +106,8 @@ export default function Dashboard() {
                   data-testid={`project-card-${project.id}`}
                 >
                   {project.coverImageUrl && (
-                    <div className="aspect-[3/4] max-h-72 overflow-hidden rounded-t-lg">
-                      <img src={project.coverImageUrl} alt="" className="w-full h-full object-cover" />
+                    <div className="aspect-[4/3] overflow-hidden rounded-t-lg">
+                      <img src={project.coverImageUrl} alt="" className="w-full h-full object-cover object-center" />
                     </div>
                   )}
                   <CardHeader className="pb-3">
