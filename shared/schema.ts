@@ -302,7 +302,7 @@ export type DesignChange = typeof designChanges.$inferSelect;
 
 // Checklist items (설계/시공 체크리스트)
 export const DesignCheckCategory = ["ARCHITECTURE", "STRUCTURE", "MEP", "INTERIOR", "LANDSCAPE", "PERMIT_DOC"] as const;
-export const ConstructionCheckCategory = ["가설", "토공", "기초", "골조", "방수", "석공", "타일", "목공", "창호", "도장", "단열", "지붕", "전기", "설비", "소방", "마감", "조경", "기타"] as const;
+export const ConstructionCheckCategory = ["가설", "토공", "기초", "골조", "방수", "석공", "타일", "목공", "창호", "외장", "도장", "단열", "지붕", "전기", "설비", "소방", "마감", "조경", "기타"] as const;
 
 export const designChecks = pgTable("design_checks", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
