@@ -72,7 +72,10 @@ export interface IStorage {
 
   // Comments
   getCommentsByRequest(requestId: string): Promise<Comment[]>;
+  getComment(id: string): Promise<Comment | undefined>;
   createComment(comment: InsertComment): Promise<Comment>;
+  updateComment(id: string, data: Partial<InsertComment>): Promise<Comment | undefined>;
+  deleteComment(id: string): Promise<boolean>;
 
   // Design Changes
   getDesignChangesByProject(projectId: string): Promise<DesignChange[]>;
@@ -309,9 +312,9 @@ export class MemStorage implements IStorage {
 
     // Comments
     const commentData: Array<Omit<Comment, "id">> = [
-      { clientRequestId: "req-1", authorId: adminId, content: "바닥재 변경 견적을 확인 중입니다. 원목 마루의 경우 추가 비용이 발생할 수 있습니다.", createdAt: new Date("2024-10-21") },
-      { clientRequestId: "req-1", authorId: clientId, content: "추가 비용 범위를 알려주시면 검토하겠습니다.", createdAt: new Date("2024-10-22") },
-      { clientRequestId: "req-2", authorId: adminId, content: "발코니 확장 관련 구조 검토가 필요합니다. 2~3일 내 결과를 공유하겠습니다.", createdAt: new Date("2024-10-26") },
+      { clientRequestId: "req-1", authorId: adminId, content: "바닥재 변경 견적을 확인 중입니다. 원목 마루의 경우 추가 비용이 발생할 수 있습니다.", createdAt: new Date("2024-10-21"), updatedAt: null },
+      { clientRequestId: "req-1", authorId: clientId, content: "추가 비용 범위를 알려주시면 검토하겠습니다.", createdAt: new Date("2024-10-22"), updatedAt: null },
+      { clientRequestId: "req-2", authorId: adminId, content: "발코니 확장 관련 구조 검토가 필요합니다. 2~3일 내 결과를 공유하겠습니다.", createdAt: new Date("2024-10-26"), updatedAt: null },
     ];
 
     commentData.forEach((c, i) => {
@@ -612,11 +615,27 @@ export class MemStorage implements IStorage {
     return Array.from(this.comments.values()).filter((c) => c.clientRequestId === requestId);
   }
 
+  async getComment(id: string): Promise<Comment | undefined> {
+    return this.comments.get(id);
+  }
+
   async createComment(insertComment: InsertComment): Promise<Comment> {
     const id = randomUUID();
-    const comment: Comment = { id, createdAt: new Date(), ...insertComment };
+    const comment: Comment = { id, createdAt: new Date(), updatedAt: null, ...insertComment };
     this.comments.set(id, comment);
     return comment;
+  }
+
+  async updateComment(id: string, data: Partial<InsertComment>): Promise<Comment | undefined> {
+    const existing = this.comments.get(id);
+    if (!existing) return undefined;
+    const updated = { ...existing, ...data, updatedAt: new Date() };
+    this.comments.set(id, updated);
+    return updated;
+  }
+
+  async deleteComment(id: string): Promise<boolean> {
+    return this.comments.delete(id);
   }
 
   // Design Changes

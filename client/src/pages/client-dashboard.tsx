@@ -33,10 +33,22 @@ export default function ClientDashboard() {
             {projects.map((project) => (
               <Card
                 key={project.id}
-                className="cursor-pointer hover:border-primary/50 transition-colors"
+                className="cursor-pointer hover:border-primary/50 transition-colors overflow-hidden"
                 onClick={() => setLocation(`/client/projects/${project.id}`)}
                 data-testid={`client-project-card-${project.id}`}
               >
+                <div className="aspect-[4/3] overflow-hidden bg-muted flex items-center justify-center">
+                  {project.coverImageUrl ? (
+                    <img
+                      src={project.coverImageUrl}
+                      alt={project.name}
+                      className="w-full h-full object-cover object-center"
+                      data-testid={`client-project-thumbnail-${project.id}`}
+                    />
+                  ) : (
+                    <FolderKanban className="w-12 h-12 text-muted-foreground/40" />
+                  )}
+                </div>
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between">
                     <CardTitle className="text-base">{project.name}</CardTitle>

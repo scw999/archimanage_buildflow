@@ -255,6 +255,7 @@ export const comments = pgTable("comments", {
   authorId: varchar("author_id").notNull(),
   content: text("content").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at"),
 });
 
 export const insertCommentSchema = createInsertSchema(comments).pick({
