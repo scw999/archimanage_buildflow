@@ -201,6 +201,7 @@ export const comments = sqliteTable("comments", {
   authorId: text("author_id").notNull(),
   content: text("content").notNull(),
   createdAt: text("created_at").$defaultFn(() => new Date().toISOString()),
+  updatedAt: text("updated_at"),
 });
 
 export const insertCommentSchema = createInsertSchema(comments).pick({

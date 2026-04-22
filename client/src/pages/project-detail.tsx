@@ -800,8 +800,8 @@ function OverviewTab({ project }: { project: Project }) {
         </CardContent>
       </Card>
 
-      {/* 프로젝트 멤버 */}
-      <ProjectMembersCard projectId={project.id} />
+      {/* 프로젝트 멤버 - 건축주에게는 숨김 */}
+      {!isClient && <ProjectMembersCard projectId={project.id} />}
 
       {/* 건축 개요 */}
       <Card>
@@ -852,17 +852,23 @@ function OverviewTab({ project }: { project: Project }) {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>현재 진행 단계</CardTitle>
-          <select
-            value={project.currentPhase}
-            onChange={(e) => updateMutation.mutate({ currentPhase: e.target.value })}
-            className="rounded-md border border-input bg-background px-3 py-1.5 text-sm font-medium"
-          >
-            <option value="DESIGN">설계</option>
-            <option value="PERMIT">인허가</option>
-            <option value="CONSTRUCTION">시공</option>
-            <option value="COMPLETION">준공</option>
-            <option value="PORTFOLIO">포트폴리오</option>
-          </select>
+          {isClient ? (
+            <Badge variant="outline" className={getPhaseColor(project.currentPhase)}>
+              {getPhaseLabel(project.currentPhase)}
+            </Badge>
+          ) : (
+            <select
+              value={project.currentPhase}
+              onChange={(e) => updateMutation.mutate({ currentPhase: e.target.value })}
+              className="rounded-md border border-input bg-background px-3 py-1.5 text-sm font-medium"
+            >
+              <option value="DESIGN">설계</option>
+              <option value="PERMIT">인허가</option>
+              <option value="CONSTRUCTION">시공</option>
+              <option value="COMPLETION">준공</option>
+              <option value="PORTFOLIO">포트폴리오</option>
+            </select>
+          )}
         </CardHeader>
         <CardContent>
           <PhaseProgress currentPhase={project.currentPhase} />
@@ -2768,8 +2774,7 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
         );
       })()}
 
-      {/* 건축주 요청사항 (시공 단계) */}
-      <RequestsSection projectId={projectId} phase="CONSTRUCTION" />
+      {/* 건축주 요청사항은 최상단 "요청사항" 탭에서 관리합니다 */}
 
       {/* 시공 체크리스트 수정 다이얼로그 */}
       {editingCheck && (() => {
@@ -4062,6 +4067,7 @@ export default function ProjectDetail() {
             <TabsTrigger value="design">설계</TabsTrigger>
             <TabsTrigger value="construction">시공</TabsTrigger>
             <TabsTrigger value="schedule">일정</TabsTrigger>
+            <TabsTrigger value="requests">요청사항</TabsTrigger>
             {!isClient && <TabsTrigger value="files">파일</TabsTrigger>}
             {!isClient && <TabsTrigger value="photos">사진</TabsTrigger>}
           </TabsList>
@@ -4069,6 +4075,7 @@ export default function ProjectDetail() {
           <TabsContent value="design"><DesignTab projectId={project.id} project={project} /></TabsContent>
           <TabsContent value="construction"><ConstructionTab projectId={project.id} project={project} /></TabsContent>
           <TabsContent value="schedule"><ScheduleTab projectId={project.id} currentPhase={project.currentPhase} /></TabsContent>
+          <TabsContent value="requests"><RequestsSection projectId={project.id} phase="CONSTRUCTION" /></TabsContent>
           {!isClient && <TabsContent value="files"><FilesTab projectId={project.id} currentPhase={project.currentPhase} /></TabsContent>}
           {!isClient && <TabsContent value="photos"><PhotosTab projectId={project.id} currentPhase={project.currentPhase} project={project} /></TabsContent>}
         </Tabs>
