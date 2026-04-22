@@ -31,6 +31,18 @@ function authMiddleware(req: Request, res: Response, next: NextFunction) {
   }
 }
 
+// 건축주(CLIENT)는 관리자용 쓰기 엔드포인트에 접근 불가
+function pmOnlyMiddleware(req: Request, res: Response, next: NextFunction) {
+  const userId = (req as any).userId;
+  storage.getUser(userId).then((user) => {
+    if (!user) return res.status(404).json({ message: "사용자를 찾을 수 없습니다" });
+    if (user.role === "CLIENT") {
+      return res.status(403).json({ message: "권한이 없습니다" });
+    }
+    next();
+  }).catch(() => res.status(500).json({ message: "서버 오류" }));
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -76,7 +88,7 @@ export async function registerRoutes(
     return res.json(safeUsers);
   });
 
-  app.post("/api/users", authMiddleware, async (req: Request, res: Response) => {
+  app.post("/api/users", authMiddleware, pmOnlyMiddleware, async (req: Request, res: Response) => {
     const { password, ...rest } = req.body;
     const hashed = await bcrypt.hash(password, 10);
     const user = await storage.createUser({ ...rest, password: hashed });
@@ -84,7 +96,7 @@ export async function registerRoutes(
     return res.json(safeUser);
   });
 
-  app.patch("/api/users/:id", authMiddleware, async (req: Request, res: Response) => {
+  app.patch("/api/users/:id", authMiddleware, pmOnlyMiddleware, async (req: Request, res: Response) => {
     const user = await storage.updateUser(req.params.id, req.body);
     if (!user) return res.status(404).json({ message: "사용자를 찾을 수 없습니다" });
     const { password: _, ...safeUser } = user;
@@ -106,7 +118,7 @@ export async function registerRoutes(
     return res.json(projectList);
   });
 
-  app.post("/api/projects", authMiddleware, async (req: Request, res: Response) => {
+  app.post("/api/projects", authMiddleware, pmOnlyMiddleware, async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const project = await storage.createProject({ ...req.body, createdBy: userId });
     return res.json(project);
@@ -118,13 +130,13 @@ export async function registerRoutes(
     return res.json(project);
   });
 
-  app.patch("/api/projects/:id", authMiddleware, async (req: Request, res: Response) => {
+  app.patch("/api/projects/:id", authMiddleware, pmOnlyMiddleware, async (req: Request, res: Response) => {
     const project = await storage.updateProject(req.params.id, req.body);
     if (!project) return res.status(404).json({ message: "프로젝트를 찾을 수 없습니다" });
     return res.json(project);
   });
 
-  app.delete("/api/projects/:id", authMiddleware, async (req: Request, res: Response) => {
+  app.delete("/api/projects/:id", authMiddleware, pmOnlyMiddleware, async (req: Request, res: Response) => {
     const success = await storage.deleteProject(req.params.id);
     if (!success) return res.status(404).json({ message: "프로젝트를 찾을 수 없습니다" });
     return res.json({ ok: true });
@@ -137,7 +149,7 @@ export async function registerRoutes(
     return res.json({ currentPhase: project.currentPhase });
   });
 
-  app.patch("/api/projects/:id/phases", authMiddleware, async (req: Request, res: Response) => {
+  app.patch("/api/projects/:id/phases", authMiddleware, pmOnlyMiddleware, async (req: Request, res: Response) => {
     const { currentPhase } = req.body;
     const project = await storage.updateProject(req.params.id, { currentPhase });
     if (!project) return res.status(404).json({ message: "프로젝트를 찾을 수 없습니다" });
@@ -150,7 +162,7 @@ export async function registerRoutes(
     return res.json(members);
   });
 
-  app.post("/api/projects/:id/members", authMiddleware, async (req: Request, res: Response) => {
+  app.post("/api/projects/:id/members", authMiddleware, pmOnlyMiddleware, async (req: Request, res: Response) => {
     const member = await storage.addProjectMember({ ...req.body, projectId: req.params.id });
     return res.json(member);
   });
@@ -161,19 +173,19 @@ export async function registerRoutes(
     return res.json(schedules);
   });
 
-  app.post("/api/projects/:id/schedules", authMiddleware, async (req: Request, res: Response) => {
+  app.post("/api/projects/:id/schedules", authMiddleware, pmOnlyMiddleware, async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const schedule = await storage.createSchedule({ ...req.body, projectId: req.params.id, createdBy: userId });
     return res.json(schedule);
   });
 
-  app.patch("/api/schedules/:id", authMiddleware, async (req: Request, res: Response) => {
+  app.patch("/api/schedules/:id", authMiddleware, pmOnlyMiddleware, async (req: Request, res: Response) => {
     const schedule = await storage.updateSchedule(req.params.id, req.body);
     if (!schedule) return res.status(404).json({ message: "일정을 찾을 수 없습니다" });
     return res.json(schedule);
   });
 
-  app.delete("/api/schedules/:id", authMiddleware, async (req: Request, res: Response) => {
+  app.delete("/api/schedules/:id", authMiddleware, pmOnlyMiddleware, async (req: Request, res: Response) => {
     const success = await storage.deleteSchedule(req.params.id);
     if (!success) return res.status(404).json({ message: "일정을 찾을 수 없습니다" });
     return res.json({ ok: true });
@@ -185,19 +197,19 @@ export async function registerRoutes(
     return res.json(logs);
   });
 
-  app.post("/api/projects/:id/daily-logs", authMiddleware, async (req: Request, res: Response) => {
+  app.post("/api/projects/:id/daily-logs", authMiddleware, pmOnlyMiddleware, async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const log = await storage.createDailyLog({ ...req.body, projectId: req.params.id, createdBy: userId });
     return res.json(log);
   });
 
-  app.patch("/api/daily-logs/:id", authMiddleware, async (req: Request, res: Response) => {
+  app.patch("/api/daily-logs/:id", authMiddleware, pmOnlyMiddleware, async (req: Request, res: Response) => {
     const log = await storage.updateDailyLog(req.params.id, req.body);
     if (!log) return res.status(404).json({ message: "작업일지를 찾을 수 없습니다" });
     return res.json(log);
   });
 
-  app.delete("/api/daily-logs/:id", authMiddleware, async (req: Request, res: Response) => {
+  app.delete("/api/daily-logs/:id", authMiddleware, pmOnlyMiddleware, async (req: Request, res: Response) => {
     const success = await storage.deleteDailyLog(req.params.id);
     if (!success) return res.status(404).json({ message: "작업일지를 찾을 수 없습니다" });
     return res.json({ ok: true });
@@ -209,19 +221,19 @@ export async function registerRoutes(
     return res.json(files);
   });
 
-  app.post("/api/projects/:id/files", authMiddleware, async (req: Request, res: Response) => {
+  app.post("/api/projects/:id/files", authMiddleware, pmOnlyMiddleware, async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const file = await storage.createFile({ ...req.body, projectId: req.params.id, createdBy: userId });
     return res.json(file);
   });
 
-  app.patch("/api/files/:id", authMiddleware, async (req: Request, res: Response) => {
+  app.patch("/api/files/:id", authMiddleware, pmOnlyMiddleware, async (req: Request, res: Response) => {
     const file = await storage.updateFile(req.params.id, req.body);
     if (!file) return res.status(404).json({ message: "파일을 찾을 수 없습니다" });
     return res.json(file);
   });
 
-  app.delete("/api/files/:id", authMiddleware, async (req: Request, res: Response) => {
+  app.delete("/api/files/:id", authMiddleware, pmOnlyMiddleware, async (req: Request, res: Response) => {
     const success = await storage.deleteFile(req.params.id);
     if (!success) return res.status(404).json({ message: "파일을 찾을 수 없습니다" });
     return res.json({ ok: true });
@@ -233,19 +245,19 @@ export async function registerRoutes(
     return res.json(photos);
   });
 
-  app.post("/api/projects/:id/photos", authMiddleware, async (req: Request, res: Response) => {
+  app.post("/api/projects/:id/photos", authMiddleware, pmOnlyMiddleware, async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const photo = await storage.createPhoto({ ...req.body, projectId: req.params.id, createdBy: userId });
     return res.json(photo);
   });
 
-  app.patch("/api/photos/:id", authMiddleware, async (req: Request, res: Response) => {
+  app.patch("/api/photos/:id", authMiddleware, pmOnlyMiddleware, async (req: Request, res: Response) => {
     const photo = await storage.updatePhoto(req.params.id, req.body);
     if (!photo) return res.status(404).json({ message: "사진을 찾을 수 없습니다" });
     return res.json(photo);
   });
 
-  app.delete("/api/photos/:id", authMiddleware, async (req: Request, res: Response) => {
+  app.delete("/api/photos/:id", authMiddleware, pmOnlyMiddleware, async (req: Request, res: Response) => {
     const photo = await storage.getPhoto(req.params.id);
     if (!photo) return res.status(404).json({ message: "사진을 찾을 수 없습니다" });
     // Remove URL from all attachments referencing this photo
@@ -477,13 +489,13 @@ export async function registerRoutes(
     return res.json(changes);
   });
 
-  app.post("/api/projects/:id/design-changes", authMiddleware, async (req: Request, res: Response) => {
+  app.post("/api/projects/:id/design-changes", authMiddleware, pmOnlyMiddleware, async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const change = await storage.createDesignChange({ ...req.body, projectId: req.params.id, requestedBy: userId });
     return res.json(change);
   });
 
-  app.patch("/api/design-changes/:id", authMiddleware, async (req: Request, res: Response) => {
+  app.patch("/api/design-changes/:id", authMiddleware, pmOnlyMiddleware, async (req: Request, res: Response) => {
     const change = await storage.updateDesignChange(req.params.id, req.body);
     if (!change) return res.status(404).json({ message: "설계변경을 찾을 수 없습니다" });
     return res.json(change);
@@ -495,18 +507,18 @@ export async function registerRoutes(
     return res.json(checks);
   });
 
-  app.post("/api/projects/:id/design-checks", authMiddleware, async (req: Request, res: Response) => {
+  app.post("/api/projects/:id/design-checks", authMiddleware, pmOnlyMiddleware, async (req: Request, res: Response) => {
     const check = await storage.createDesignCheck({ ...req.body, projectId: req.params.id });
     return res.json(check);
   });
 
-  app.patch("/api/design-checks/:id", authMiddleware, async (req: Request, res: Response) => {
+  app.patch("/api/design-checks/:id", authMiddleware, pmOnlyMiddleware, async (req: Request, res: Response) => {
     const check = await storage.updateDesignCheck(req.params.id, req.body);
     if (!check) return res.status(404).json({ message: "체크리스트 항목을 찾을 수 없습니다" });
     return res.json(check);
   });
 
-  app.delete("/api/design-checks/:id", authMiddleware, async (req: Request, res: Response) => {
+  app.delete("/api/design-checks/:id", authMiddleware, pmOnlyMiddleware, async (req: Request, res: Response) => {
     const success = await storage.deleteDesignCheck(req.params.id);
     if (!success) return res.status(404).json({ message: "체크리스트 항목을 찾을 수 없습니다" });
     return res.json({ ok: true });
@@ -518,14 +530,14 @@ export async function registerRoutes(
     return res.json(tasks);
   });
 
-  app.post("/api/projects/:id/construction-tasks", authMiddleware, async (req: Request, res: Response) => {
+  app.post("/api/projects/:id/construction-tasks", authMiddleware, pmOnlyMiddleware, async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const task = await storage.createConstructionTask({ ...req.body, projectId: req.params.id, createdBy: userId });
     return res.json(task);
   });
 
   // Bulk create construction tasks
-  app.post("/api/projects/:id/construction-tasks/bulk", authMiddleware, async (req: Request, res: Response) => {
+  app.post("/api/projects/:id/construction-tasks/bulk", authMiddleware, pmOnlyMiddleware, async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { tasks } = req.body;
     if (!Array.isArray(tasks)) return res.status(400).json({ message: "tasks 배열이 필요합니다" });
@@ -538,7 +550,7 @@ export async function registerRoutes(
   });
 
   // Reorder construction tasks
-  app.patch("/api/projects/:id/construction-tasks/reorder", authMiddleware, async (req: Request, res: Response) => {
+  app.patch("/api/projects/:id/construction-tasks/reorder", authMiddleware, pmOnlyMiddleware, async (req: Request, res: Response) => {
     const { orderedIds } = req.body;
     if (!Array.isArray(orderedIds)) return res.status(400).json({ message: "orderedIds 배열이 필요합니다" });
     for (let i = 0; i < orderedIds.length; i++) {
@@ -547,13 +559,13 @@ export async function registerRoutes(
     return res.json({ ok: true });
   });
 
-  app.patch("/api/construction-tasks/:id", authMiddleware, async (req: Request, res: Response) => {
+  app.patch("/api/construction-tasks/:id", authMiddleware, pmOnlyMiddleware, async (req: Request, res: Response) => {
     const task = await storage.updateConstructionTask(req.params.id, req.body);
     if (!task) return res.status(404).json({ message: "공정을 찾을 수 없습니다" });
     return res.json(task);
   });
 
-  app.delete("/api/construction-tasks/:id", authMiddleware, async (req: Request, res: Response) => {
+  app.delete("/api/construction-tasks/:id", authMiddleware, pmOnlyMiddleware, async (req: Request, res: Response) => {
     const success = await storage.deleteConstructionTask(req.params.id);
     if (!success) return res.status(404).json({ message: "공정을 찾을 수 없습니다" });
     return res.json({ ok: true });
@@ -565,19 +577,19 @@ export async function registerRoutes(
     return res.json(inspections);
   });
 
-  app.post("/api/projects/:id/inspections", authMiddleware, async (req: Request, res: Response) => {
+  app.post("/api/projects/:id/inspections", authMiddleware, pmOnlyMiddleware, async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const inspection = await storage.createInspection({ ...req.body, projectId: req.params.id, createdBy: userId });
     return res.json(inspection);
   });
 
-  app.patch("/api/inspections/:id", authMiddleware, async (req: Request, res: Response) => {
+  app.patch("/api/inspections/:id", authMiddleware, pmOnlyMiddleware, async (req: Request, res: Response) => {
     const inspection = await storage.updateInspection(req.params.id, req.body);
     if (!inspection) return res.status(404).json({ message: "검수 항목을 찾을 수 없습니다" });
     return res.json(inspection);
   });
 
-  app.delete("/api/inspections/:id", authMiddleware, async (req: Request, res: Response) => {
+  app.delete("/api/inspections/:id", authMiddleware, pmOnlyMiddleware, async (req: Request, res: Response) => {
     const deleted = await storage.deleteInspection(req.params.id);
     if (!deleted) return res.status(404).json({ message: "검수 항목을 찾을 수 없습니다" });
     return res.json({ success: true });
@@ -589,25 +601,25 @@ export async function registerRoutes(
     return res.json(defects);
   });
 
-  app.post("/api/projects/:id/defects", authMiddleware, async (req: Request, res: Response) => {
+  app.post("/api/projects/:id/defects", authMiddleware, pmOnlyMiddleware, async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const defect = await storage.createDefect({ ...req.body, projectId: req.params.id, reportedBy: userId });
     return res.json(defect);
   });
 
-  app.patch("/api/defects/:id", authMiddleware, async (req: Request, res: Response) => {
+  app.patch("/api/defects/:id", authMiddleware, pmOnlyMiddleware, async (req: Request, res: Response) => {
     const defect = await storage.updateDefect(req.params.id, req.body);
     if (!defect) return res.status(404).json({ message: "하자를 찾을 수 없습니다" });
     return res.json(defect);
   });
 
-  app.delete("/api/defects/:id", authMiddleware, async (req: Request, res: Response) => {
+  app.delete("/api/defects/:id", authMiddleware, pmOnlyMiddleware, async (req: Request, res: Response) => {
     const success = await storage.deleteDefect(req.params.id);
     if (!success) return res.status(404).json({ message: "하자를 찾을 수 없습니다" });
     return res.json({ ok: true });
   });
 
-  app.delete("/api/design-changes/:id", authMiddleware, async (req: Request, res: Response) => {
+  app.delete("/api/design-changes/:id", authMiddleware, pmOnlyMiddleware, async (req: Request, res: Response) => {
     const success = await storage.deleteDesignChange(req.params.id);
     if (!success) return res.status(404).json({ message: "설계변경을 찾을 수 없습니다" });
     return res.json({ ok: true });

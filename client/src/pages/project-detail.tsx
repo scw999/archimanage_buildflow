@@ -688,6 +688,8 @@ function ProjectMembersCard({ projectId }: { projectId: string }) {
 
 function OverviewTab({ project }: { project: Project }) {
   const { toast } = useToast();
+  const { user } = useAuth();
+  const isClient = user?.role === "CLIENT";
   const [editOpen, setEditOpen] = useState(false);
 
   const { data: designChecks } = useQuery<DesignCheck[]>({ queryKey: [`/api/projects/${project.id}/design-checks`] });
@@ -723,7 +725,7 @@ function OverviewTab({ project }: { project: Project }) {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>프로젝트 정보</CardTitle>
-          <Button size="sm" variant="outline" onClick={() => setEditOpen(true)}>수정</Button>
+          <Button size="sm" variant="outline" className="pm-only" onClick={() => setEditOpen(true)}>수정</Button>
         </CardHeader>
         <CardContent className="space-y-3">
           {/* 대표 사진 */}
@@ -731,7 +733,7 @@ function OverviewTab({ project }: { project: Project }) {
             {project.coverImageUrl ? (
               <div className="relative rounded-lg overflow-hidden border mb-3">
                 <img src={project.coverImageUrl} alt="대표 사진" className="w-full object-contain bg-muted/30" style={{ maxHeight: "500px" }} />
-                <div className="absolute bottom-2 right-2">
+                <div className="absolute bottom-2 right-2 pm-only">
                   <label className="bg-black/60 text-white text-xs px-2 py-1 rounded cursor-pointer hover:bg-black/80">
                     변경
                     <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
@@ -753,7 +755,7 @@ function OverviewTab({ project }: { project: Project }) {
                   </label>
                 </div>
               </div>
-            ) : (
+            ) : !isClient ? (
               <label className="flex items-center justify-center h-32 rounded-lg border-2 border-dashed border-muted cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors mb-3">
                 <div className="text-center">
                   <Camera className="w-6 h-6 mx-auto text-muted-foreground mb-1" />
@@ -776,7 +778,7 @@ function OverviewTab({ project }: { project: Project }) {
                   e.target.value = "";
                 }} />
               </label>
-            )}
+            ) : null}
           </div>
           {project.description && <p className="text-sm">{project.description}</p>}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
@@ -996,6 +998,8 @@ function OverviewTab({ project }: { project: Project }) {
 // ─── Design Tab ──────────────────────────────────────────────
 function DesignTab({ projectId, project }: { projectId: string; project: Project }) {
   const { toast } = useToast();
+  const { user } = useAuth();
+  const isClient = user?.role === "CLIENT";
   const [checkDialogOpen, setCheckDialogOpen] = useState(false);
   const [changeDialogOpen, setChangeDialogOpen] = useState(false);
   const [newChangeAttachments, setNewChangeAttachments] = useState<string[]>([]);
@@ -1110,7 +1114,7 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="flex items-center gap-2"><Layers className="w-5 h-5" /> 평면도</CardTitle>
-          <Button size="sm" variant="outline" onClick={() => setEditingFloorPlans(true)}>
+          <Button size="sm" variant="outline" className="pm-only" onClick={() => setEditingFloorPlans(true)}>
             <Pencil className="w-3.5 h-3.5 mr-1" />수정
           </Button>
         </CardHeader>
@@ -1144,7 +1148,7 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="flex items-center gap-2"><Building2 className="w-5 h-5" /> 입면도</CardTitle>
-          <Button size="sm" variant="outline" onClick={() => setEditingElevations(true)}>
+          <Button size="sm" variant="outline" className="pm-only" onClick={() => setEditingElevations(true)}>
             <Pencil className="w-3.5 h-3.5 mr-1" />수정
           </Button>
         </CardHeader>
@@ -1182,7 +1186,7 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
           </CardTitle>
           <Dialog open={checkDialogOpen} onOpenChange={(o) => { setCheckDialogOpen(o); if (!o) setNewCheckAttachments([]); }}>
             <DialogTrigger asChild>
-              <Button size="sm"><Plus className="w-4 h-4 mr-1" />추가</Button>
+              <Button size="sm" className="pm-only"><Plus className="w-4 h-4 mr-1" />추가</Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader><DialogTitle>체크리스트 항목 추가</DialogTitle></DialogHeader>
@@ -1244,7 +1248,7 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
                       return (
                       <div key={item.id} className="p-3 rounded-lg border hover:bg-muted/30">
                         <div className="flex items-start gap-3">
-                          <input type="checkbox" checked={isCompleted}
+                          <input type="checkbox" checked={isCompleted} disabled={isClient}
                             onChange={() => toggleCheckMutation.mutate({ id: item.id, isCompleted: isCompleted ? 0 : 1 })}
                             className="w-4 h-4 rounded border-gray-300 mt-0.5 shrink-0" />
                           <div className="flex-1 min-w-0">
@@ -1252,7 +1256,7 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
                               <span className={`text-sm font-medium ${isCompleted ? "line-through text-muted-foreground" : ""}`}>{item.title}</span>
                               {(item as any).linkedToConstruction === 1 && <Badge variant="outline" className="text-xs px-1.5">시공연동</Badge>}
                               {itemAttachments.length > 0 && <span className="text-xs text-muted-foreground"><Camera className="w-3 h-3 inline" /> {itemAttachments.length}</span>}
-                              <Button variant="ghost" size="icon" className="h-6 w-6 ml-auto shrink-0" onClick={() => setEditingCheck(item)}>
+                              <Button variant="ghost" size="icon" className="h-6 w-6 ml-auto shrink-0 pm-only" onClick={() => setEditingCheck(item)}>
                                 <Pencil className="w-3 h-3" />
                               </Button>
                             </div>
@@ -1286,7 +1290,7 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
           <CardTitle>설계변경 이력</CardTitle>
           <Dialog open={changeDialogOpen} onOpenChange={(open) => { setChangeDialogOpen(open); if (!open) setNewChangeAttachments([]); }}>
             <DialogTrigger asChild>
-              <Button size="sm"><Plus className="w-4 h-4 mr-1" />설계변경 등록</Button>
+              <Button size="sm" className="pm-only"><Plus className="w-4 h-4 mr-1" />설계변경 등록</Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader><DialogTitle>설계변경 등록</DialogTitle></DialogHeader>
@@ -1338,7 +1342,7 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
                         <div className="mt-2"><AttachmentPreviewGrid attachments={dcAttachments} /></div>
                       )}
                     </div>
-                    <div className="flex items-center gap-1 shrink-0">
+                    <div className="flex items-center gap-1 shrink-0 pm-only">
                       <select value={dc.status}
                         onChange={(e) => { changeStatusMutation.mutate({ id: dc.id, status: e.target.value }); }}
                         className="rounded-md border border-input bg-background px-1.5 py-0.5 text-xs h-7">
@@ -1475,7 +1479,8 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
         </CardContent>
       </Card>
 
-      {/* 3D 파일 관리 */}
+      {/* 3D 파일 관리 - 건축주에게는 숨김 */}
+      {!isClient && (
       <Card>
         <CardHeader><CardTitle>3D 파일 관리</CardTitle></CardHeader>
         <CardContent>
@@ -1503,6 +1508,7 @@ function DesignTab({ projectId, project }: { projectId: string; project: Project
           )}
         </CardContent>
       </Card>
+      )}
 
       {/* 체크리스트 수정 다이얼로그 */}
       {editingCheck && (() => {
@@ -1892,11 +1898,12 @@ function RequestsSection({ projectId, phase }: { projectId: string; phase: strin
 }
 
 // ─── Sortable Task Item ──────────────────────────────────────
-function SortableTaskItem({ task, isExpanded, onToggle, progress, onProgressChange, onProgressCommit, onStatusChange, onEdit, onDelete, onUpdateTask, photos, projectId, reorderMode }: {
+function SortableTaskItem({ task, isExpanded, onToggle, progress, onProgressChange, onProgressCommit, onStatusChange, onEdit, onDelete, onUpdateTask, photos, projectId, reorderMode, readOnly = false }: {
   task: ConstructionTask; isExpanded: boolean; onToggle: () => void;
   progress: number; onProgressChange: (v: number) => void; onProgressCommit: (v: number) => void;
   onStatusChange: (s: string) => void; onEdit: () => void; onDelete: () => void;
   onUpdateTask: (data: any) => void; photos: Photo[]; projectId: string; reorderMode: boolean;
+  readOnly?: boolean;
 }) {
   const { toast } = useToast();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id, disabled: !reorderMode });
@@ -1932,9 +1939,11 @@ function SortableTaskItem({ task, isExpanded, onToggle, progress, onProgressChan
                   {isExpanded ? <ChevronDown className="w-3 h-3 mr-1" /> : <ChevronRight className="w-3 h-3 mr-1" />}
                   {isExpanded ? "접기" : "상세"}
                 </Button>
-                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onEdit}>
-                  <Pencil className="w-3 h-3" />
-                </Button>
+                {!readOnly && (
+                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onEdit}>
+                    <Pencil className="w-3 h-3" />
+                  </Button>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -1955,6 +1964,7 @@ function SortableTaskItem({ task, isExpanded, onToggle, progress, onProgressChan
                         <input
                           type="checkbox"
                           checked={item.checked}
+                          disabled={readOnly}
                           onChange={() => {
                             const next = checklistItems.map((ci, i) =>
                               i === idx ? { ...ci, checked: !ci.checked } : ci
@@ -1996,7 +2006,7 @@ function SortableTaskItem({ task, isExpanded, onToggle, progress, onProgressChan
               </>
             )}
           </div>
-          {isExpanded && (
+          {isExpanded && !readOnly && (
             <div className="mt-3 pt-3 border-t space-y-3">
               <div className="space-y-1">
                 <Label className="text-xs">진행률: {progress}%</Label>
@@ -2099,6 +2109,8 @@ function SortableTaskItem({ task, isExpanded, onToggle, progress, onProgressChan
 // ─── Construction Tab ────────────────────────────────────────
 function ConstructionTab({ projectId, project }: { projectId: string; project: Project }) {
   const { toast } = useToast();
+  const { user } = useAuth();
+  const isClient = user?.role === "CLIENT";
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
   const [inspDialogOpen, setInspDialogOpen] = useState(false);
@@ -2313,7 +2325,7 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
             </span>
           </CardTitle>
           <Dialog open={checkDialogOpen} onOpenChange={(o) => { setCheckDialogOpen(o); if (!o) setNewConCheckAttachments([]); }}>
-            <DialogTrigger asChild><Button size="sm"><Plus className="w-4 h-4 mr-1" />추가</Button></DialogTrigger>
+            <DialogTrigger asChild><Button size="sm" className="pm-only"><Plus className="w-4 h-4 mr-1" />추가</Button></DialogTrigger>
             <DialogContent>
               <DialogHeader><DialogTitle>시공 체크리스트 항목 추가</DialogTitle></DialogHeader>
               <form onSubmit={(e) => {
@@ -2414,7 +2426,7 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="flex items-center gap-2"><HardHat className="w-5 h-5" /> 공정 목록</CardTitle>
-          <div className="flex gap-2">
+          <div className="flex gap-2 pm-only">
             <Button size="sm" variant={reorderMode ? "default" : "outline"}
               onClick={() => setReorderMode(!reorderMode)}>
               <ArrowUpDown className="w-4 h-4 mr-1" />
@@ -2529,6 +2541,7 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
                       photos={constructionPhotos}
                       projectId={projectId}
                       reorderMode={reorderMode}
+                      readOnly={isClient}
                     />
                   ))}
                 </div>
@@ -2538,7 +2551,8 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
         </CardContent>
       </Card>
 
-      {/* 검수 */}
+      {/* 검수 - 건축주에게는 숨김 */}
+      {!isClient && (
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="flex items-center gap-2"><Search className="w-5 h-5" /> 검수</CardTitle>
@@ -2613,8 +2627,10 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
           )}
         </CardContent>
       </Card>
+      )}
 
-      {/* 하자 관리 */}
+      {/* 하자 관리 - 건축주에게는 숨김 */}
+      {!isClient && (
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="flex items-center gap-2"><AlertTriangle className="w-5 h-5" /> 하자 관리</CardTitle>
@@ -2690,6 +2706,7 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
           )}
         </CardContent>
       </Card>
+      )}
 
       {/* 하자 수정 다이얼로그 */}
       {editingDefect && (() => {
@@ -2910,6 +2927,8 @@ function ConstructionTab({ projectId, project }: { projectId: string; project: P
 // ─── Schedule Tab ────────────────────────────────────────────
 function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPhase: string }) {
   const { toast } = useToast();
+  const { user } = useAuth();
+  const isClient = user?.role === "CLIENT";
   const [dialogOpen, setDialogOpen] = useState(false);
   const [logDialogOpen, setLogDialogOpen] = useState(false);
   const [selectedPreset, setSelectedPreset] = useState("");
@@ -2964,7 +2983,7 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="flex items-center gap-2"><Calendar className="w-5 h-5" /> 일정</CardTitle>
           <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if (!o) { setSelectedPreset(""); setNewSchedAttachments([]); } }}>
-            <DialogTrigger asChild><Button size="sm"><Plus className="w-4 h-4 mr-1" />추가</Button></DialogTrigger>
+            <DialogTrigger asChild><Button size="sm" className="pm-only"><Plus className="w-4 h-4 mr-1" />추가</Button></DialogTrigger>
             <DialogContent>
               <DialogHeader><DialogTitle>일정 추가</DialogTitle></DialogHeader>
               <div className="space-y-2 mb-4">
@@ -3051,7 +3070,7 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
                         <div className="mt-2"><AttachmentPreviewGrid attachments={sAttachments} /></div>
                       )}
                     </div>
-                    <div className="flex items-center gap-1 shrink-0">
+                    <div className="flex items-center gap-1 shrink-0 pm-only">
                       <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditingSchedule(s)}>
                         <Pencil className="w-3.5 h-3.5" />
                       </Button>
@@ -3069,6 +3088,8 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
         </CardContent>
       </Card>
 
+      {/* 작업일지 - 건축주에게는 숨김 */}
+      {!isClient && (
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>작업일지</CardTitle>
@@ -3139,6 +3160,7 @@ function ScheduleTab({ projectId, currentPhase }: { projectId: string; currentPh
           )}
         </CardContent>
       </Card>
+      )}
 
       {/* 일정 수정 다이얼로그 */}
       {editingSchedule && (() => {
@@ -3990,6 +4012,8 @@ function PhotosTab({ projectId, currentPhase, project }: { projectId: string; cu
 export default function ProjectDetail() {
   const [, params] = useRoute("/projects/:id");
   const projectId = params?.id;
+  const { user } = useAuth();
+  const isClient = user?.role === "CLIENT";
 
   const { data: project, isLoading } = useQuery<Project>({
     queryKey: [`/api/projects/${projectId}`],
@@ -4017,7 +4041,7 @@ export default function ProjectDetail() {
 
   return (
     <AppLayout>
-      <div className="space-y-6" data-testid="project-detail">
+      <div className="space-y-6" data-testid="project-detail" data-role={user?.role ?? ""}>
         <div>
           <h1 className="text-2xl font-bold">{project.name}</h1>
           <div className="flex items-center gap-2 mt-1">
@@ -4038,15 +4062,15 @@ export default function ProjectDetail() {
             <TabsTrigger value="design">설계</TabsTrigger>
             <TabsTrigger value="construction">시공</TabsTrigger>
             <TabsTrigger value="schedule">일정</TabsTrigger>
-            <TabsTrigger value="files">파일</TabsTrigger>
-            <TabsTrigger value="photos">사진</TabsTrigger>
+            {!isClient && <TabsTrigger value="files">파일</TabsTrigger>}
+            {!isClient && <TabsTrigger value="photos">사진</TabsTrigger>}
           </TabsList>
           <TabsContent value="overview"><OverviewTab project={project} /></TabsContent>
           <TabsContent value="design"><DesignTab projectId={project.id} project={project} /></TabsContent>
           <TabsContent value="construction"><ConstructionTab projectId={project.id} project={project} /></TabsContent>
           <TabsContent value="schedule"><ScheduleTab projectId={project.id} currentPhase={project.currentPhase} /></TabsContent>
-          <TabsContent value="files"><FilesTab projectId={project.id} currentPhase={project.currentPhase} /></TabsContent>
-          <TabsContent value="photos"><PhotosTab projectId={project.id} currentPhase={project.currentPhase} project={project} /></TabsContent>
+          {!isClient && <TabsContent value="files"><FilesTab projectId={project.id} currentPhase={project.currentPhase} /></TabsContent>}
+          {!isClient && <TabsContent value="photos"><PhotosTab projectId={project.id} currentPhase={project.currentPhase} project={project} /></TabsContent>}
         </Tabs>
       </div>
     </AppLayout>

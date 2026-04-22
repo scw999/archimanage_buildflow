@@ -146,4 +146,9 @@
     color: hsl(var(--muted-foreground));
     pointer-events: none;
   }
+
+  /* 건축주(CLIENT) 역할: 관리자 전용 UI 숨김 */
+  [data-role="CLIENT"] .pm-only {
+    display: none !important;
+  }
 }
