@@ -29,7 +29,8 @@ export function AppSidebar() {
   ];
 
   const clientNav = [
-    { label: "내 프로젝트", icon: FolderKanban, path: "/client" },
+    { label: "내 프로젝트", icon: FolderKanban, path: "/" },
+    { label: "설정", icon: Settings, path: "/settings" },
   ];
 
   const navItems = isClient ? clientNav : pmNav;
@@ -39,7 +40,7 @@ export function AppSidebar() {
       <SidebarHeader className="p-4">
         <div
           className="flex items-center gap-2 cursor-pointer"
-          onClick={() => setLocation(isClient ? "/client" : "/")}
+          onClick={() => setLocation("/")}
           data-testid="sidebar-logo"
         >
           <Building2 className="w-7 h-7 text-primary" />

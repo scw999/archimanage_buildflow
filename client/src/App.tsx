@@ -12,8 +12,6 @@ import LoginPage from "@/pages/login";
 import DashboardPage from "@/pages/dashboard";
 import ProjectsPage from "@/pages/projects";
 import ProjectDetailPage from "@/pages/project-detail";
-import ClientDashboardPage from "@/pages/client-dashboard";
-import ClientProjectPage from "@/pages/client-project";
 import SettingsPage from "@/pages/settings";
 
 function AuthTokenSync() {
@@ -25,7 +23,7 @@ function AuthTokenSync() {
 }
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading, user } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
   const [location, setLocation] = useLocation();
 
   useEffect(() => {
@@ -34,13 +32,16 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
       setLocation("/login");
     }
     if (isAuthenticated && location === "/login") {
-      if (user?.role === "CLIENT") {
-        setLocation("/client");
-      } else {
-        setLocation("/");
-      }
+      setLocation("/");
     }
-  }, [isAuthenticated, isLoading, location, setLocation, user]);
+    // Redirect legacy /client routes to the unified views
+    if (isAuthenticated && location === "/client") {
+      setLocation("/");
+    }
+    if (isAuthenticated && location.startsWith("/client/projects/")) {
+      setLocation(location.replace("/client", ""));
+    }
+  }, [isAuthenticated, isLoading, location, setLocation]);
 
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" /></div>;
@@ -61,8 +62,6 @@ function AppRouter() {
         <Route path="/" component={DashboardPage} />
         <Route path="/projects" component={ProjectsPage} />
         <Route path="/projects/:id" component={ProjectDetailPage} />
-        <Route path="/client" component={ClientDashboardPage} />
-        <Route path="/client/projects/:id" component={ClientProjectPage} />
         <Route path="/settings" component={SettingsPage} />
         <Route component={NotFound} />
       </Switch>
