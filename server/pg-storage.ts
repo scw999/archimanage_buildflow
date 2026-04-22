@@ -192,9 +192,24 @@ export class PgStorage implements IStorage {
     return db.select().from(comments).where(eq(comments.clientRequestId, requestId));
   }
 
+  async getComment(id: string): Promise<Comment | undefined> {
+    const [row] = await db.select().from(comments).where(eq(comments.id, id));
+    return row;
+  }
+
   async createComment(data: InsertComment): Promise<Comment> {
     const [row] = await db.insert(comments).values(data).returning();
     return row;
+  }
+
+  async updateComment(id: string, data: Partial<InsertComment>): Promise<Comment | undefined> {
+    const [row] = await db.update(comments).set({ ...data, updatedAt: new Date() }).where(eq(comments.id, id)).returning();
+    return row;
+  }
+
+  async deleteComment(id: string): Promise<boolean> {
+    const result = await db.delete(comments).where(eq(comments.id, id)).returning();
+    return result.length > 0;
   }
 
   // Design Changes

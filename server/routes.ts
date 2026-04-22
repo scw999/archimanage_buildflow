@@ -391,13 +391,54 @@ export async function registerRoutes(
   // Comments
   app.get("/api/requests/:id/comments", authMiddleware, async (req: Request, res: Response) => {
     const comments = await storage.getCommentsByRequest(req.params.id);
-    return res.json(comments);
+    const authorIds = Array.from(new Set(comments.map((c) => c.authorId)));
+    const users = await Promise.all(authorIds.map((uid) => storage.getUser(uid)));
+    const authorMap = new Map<string, { name: string; role: string }>();
+    users.forEach((u) => { if (u) authorMap.set(u.id, { name: u.name, role: u.role }); });
+    const enriched = comments.map((c) => ({
+      ...c,
+      authorName: authorMap.get(c.authorId)?.name ?? null,
+      authorRole: authorMap.get(c.authorId)?.role ?? null,
+    }));
+    return res.json(enriched);
   });
 
   app.post("/api/requests/:id/comments", authMiddleware, async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const comment = await storage.createComment({ ...req.body, clientRequestId: req.params.id, authorId: userId });
     return res.json(comment);
+  });
+
+  app.patch("/api/comments/:id", authMiddleware, async (req: Request, res: Response) => {
+    const userId = (req as any).userId;
+    const user = await storage.getUser(userId);
+    if (!user) return res.status(404).json({ message: "사용자를 찾을 수 없습니다" });
+    const existing = await storage.getComment(req.params.id);
+    if (!existing) return res.status(404).json({ message: "댓글을 찾을 수 없습니다" });
+    const canManage = user.role === "SUPER_ADMIN" || user.role === "PM";
+    if (!canManage && existing.authorId !== userId) {
+      return res.status(403).json({ message: "댓글을 수정할 권한이 없습니다" });
+    }
+    const { content } = req.body;
+    if (typeof content !== "string" || !content.trim()) {
+      return res.status(400).json({ message: "댓글 내용을 입력해주세요" });
+    }
+    const updated = await storage.updateComment(req.params.id, { content });
+    return res.json(updated);
+  });
+
+  app.delete("/api/comments/:id", authMiddleware, async (req: Request, res: Response) => {
+    const userId = (req as any).userId;
+    const user = await storage.getUser(userId);
+    if (!user) return res.status(404).json({ message: "사용자를 찾을 수 없습니다" });
+    const existing = await storage.getComment(req.params.id);
+    if (!existing) return res.status(404).json({ message: "댓글을 찾을 수 없습니다" });
+    const canManage = user.role === "SUPER_ADMIN" || user.role === "PM";
+    if (!canManage && existing.authorId !== userId) {
+      return res.status(403).json({ message: "댓글을 삭제할 권한이 없습니다" });
+    }
+    await storage.deleteComment(req.params.id);
+    return res.json({ ok: true });
   });
 
   // Password change

@@ -255,6 +255,9 @@ import type {
 } from "@shared/schema";
 import { ConstructionCheckCategory } from "@shared/schema";
 
+// ─── Shared Types ────────────────────────────────────────────
+type CommentWithAuthor = Comment & { authorName?: string | null; authorRole?: string | null };
+
 // ─── Preset Data ─────────────────────────────────────────────
 const CONSTRUCTION_CATEGORIES = [
   { value: "가설공사", label: "가설공사" },
@@ -289,6 +292,65 @@ function safeParseAttachments(val: any): string[] {
   if (!val || typeof val !== "string") return [];
   try { const parsed = JSON.parse(val); return Array.isArray(parsed) ? parsed : []; }
   catch { return []; }
+}
+
+function getRoleLabel(role?: string | null): string {
+  const map: Record<string, string> = { SUPER_ADMIN: "관리자", PM: "매니저", MEMBER: "팀원", CLIENT: "건축주" };
+  return role ? (map[role] ?? role) : "";
+}
+
+function CommentItem({
+  comment, canEdit, canDelete, onUpdate, onDelete,
+}: {
+  comment: CommentWithAuthor;
+  canEdit: boolean;
+  canDelete: boolean;
+  onUpdate: (content: string) => void;
+  onDelete: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(comment.content);
+  const edited = !!comment.updatedAt;
+
+  return (
+    <div className="p-2 bg-muted/50 rounded text-xs space-y-1" data-testid={`comment-${comment.id}`}>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <span className="font-medium text-foreground">{comment.authorName ?? "사용자"}</span>
+          {comment.authorRole && <Badge variant="outline" className="text-[10px] px-1 py-0 h-4">{getRoleLabel(comment.authorRole)}</Badge>}
+          {edited && <span>(수정됨)</span>}
+        </div>
+        {!editing && (canEdit || canDelete) && (
+          <div className="flex items-center gap-0.5 shrink-0">
+            {canEdit && (
+              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { setDraft(comment.content); setEditing(true); }} data-testid={`comment-edit-${comment.id}`}>
+                <Pencil className="w-3 h-3" />
+              </Button>
+            )}
+            {canDelete && (
+              <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:text-destructive"
+                onClick={() => { if (confirm("이 댓글을 삭제하시겠습니까?")) onDelete(); }}
+                data-testid={`comment-delete-${comment.id}`}>
+                <Trash2 className="w-3 h-3" />
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
+      {editing ? (
+        <div className="space-y-1">
+          <Textarea value={draft} onChange={(e) => setDraft(e.target.value)} className="text-xs min-h-[60px]" />
+          <div className="flex gap-1 justify-end">
+            <Button size="sm" variant="ghost" className="h-7" onClick={() => setEditing(false)}>취소</Button>
+            <Button size="sm" className="h-7" disabled={!draft.trim() || draft === comment.content}
+              onClick={() => { onUpdate(draft.trim()); setEditing(false); }}>저장</Button>
+          </div>
+        </div>
+      ) : (
+        <div className="whitespace-pre-wrap">{comment.content}</div>
+      )}
+    </div>
+  );
 }
 
 function isImageLikeUrl(url: string) {
@@ -1596,7 +1658,7 @@ function RequestsSection({ projectId, phase }: { projectId: string; phase: strin
 
   const { data: allRequests } = useQuery<ClientRequest[]>({ queryKey: [`/api/projects/${projectId}/requests`] });
   const requests = allRequests?.filter((r) => r.phase === phase) ?? [];
-  const { data: comments } = useQuery<Comment[]>({
+  const { data: comments } = useQuery<CommentWithAuthor[]>({
     queryKey: [`/api/requests/${expandedReq}/comments`],
     enabled: !!expandedReq,
   });
@@ -1621,6 +1683,18 @@ function RequestsSection({ projectId, phase }: { projectId: string; phase: strin
       await apiRequest("POST", `/api/requests/${requestId}/comments`, { content });
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/requests/${expandedReq}/comments`] }); },
+  });
+
+  const updateCommentMutation = useMutation({
+    mutationFn: async ({ id, content }: { id: string; content: string }) => {
+      await apiRequest("PATCH", `/api/comments/${id}`, { content });
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/requests/${expandedReq}/comments`] }); toast({ title: "댓글이 수정되었습니다" }); },
+  });
+
+  const deleteCommentMutation = useMutation({
+    mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/comments/${id}`); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`/api/requests/${expandedReq}/comments`] }); toast({ title: "댓글이 삭제되었습니다" }); },
   });
 
   const resolved = requests.filter((r) => r.status === "RESOLVED").length;
@@ -1724,7 +1798,14 @@ function RequestsSection({ projectId, phase }: { projectId: string; phase: strin
                     {expandedReq === req.id && (
                       <div className="mt-2 space-y-2">
                         {comments?.map((c) => (
-                          <div key={c.id} className="p-2 bg-muted/50 rounded text-xs">{c.content}</div>
+                          <CommentItem
+                            key={c.id}
+                            comment={c}
+                            canEdit={isPM || c.authorId === user?.id}
+                            canDelete={isPM || c.authorId === user?.id}
+                            onUpdate={(content) => updateCommentMutation.mutate({ id: c.id, content })}
+                            onDelete={() => deleteCommentMutation.mutate(c.id)}
+                          />
                         ))}
                         <form onSubmit={(e) => {
                           e.preventDefault(); const fd = new FormData(e.currentTarget);
