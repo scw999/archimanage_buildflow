@@ -97,6 +97,34 @@ app.use("/api/*", async (c, next) => {
   return next();
 });
 
+// --- CLIENT 역할: 관리자 전용 쓰기 API 차단 ---
+// 건축주(CLIENT)에게 허용된 쓰기 경로만 통과시킴
+const CLIENT_ALLOWED_WRITE = [
+  /^POST \/api\/auth\/logout$/,
+  /^PATCH \/api\/auth\/change-password$/,
+  /^POST \/api\/projects\/[^/]+\/requests$/, // 요청사항 등록
+  /^PATCH \/api\/requests\/[^/]+$/,          // 요청사항 수정
+  /^DELETE \/api\/requests\/[^/]+$/,         // 요청사항 삭제
+  /^POST \/api\/requests\/[^/]+\/comments$/, // 댓글 등록
+  /^PATCH \/api\/comments\/[^/]+$/,          // 댓글 수정
+  /^DELETE \/api\/comments\/[^/]+$/,         // 댓글 삭제
+];
+
+app.use("/api/*", async (c, next) => {
+  const method = c.req.method;
+  if (method === "GET" || method === "OPTIONS" || method === "HEAD") return next();
+  if (c.req.path === "/api/auth/login") return next();
+
+  const user = await getCurrentUser(c);
+  if (!user) return c.json({ message: "사용자를 찾을 수 없습니다" }, 404);
+  if (user.role !== "CLIENT") return next();
+
+  const sig = `${method} ${c.req.path}`;
+  const allowed = CLIENT_ALLOWED_WRITE.some((re) => re.test(sig));
+  if (!allowed) return c.json({ message: "권한이 없습니다" }, 403);
+  return next();
+});
+
 // Helper to get DB
 function getDb(c: { env: Bindings }) {
   return drizzle(c.env.DB, { schema });
@@ -151,6 +179,14 @@ async function getCurrentUser(c: any) {
   const db = getDb(c);
   const [user] = await db.select().from(schema.users).where(eq(schema.users.id, c.get("userId")));
   return user;
+}
+
+// Helper: 건축주(CLIENT)는 관리자용 쓰기 API 접근 불가
+async function requirePM(c: any): Promise<Response | null> {
+  const user = await getCurrentUser(c);
+  if (!user) return c.json({ message: "사용자를 찾을 수 없습니다" }, 404);
+  if (user.role === "CLIENT") return c.json({ message: "권한이 없습니다" }, 403);
+  return null;
 }
 
 // Helper: check if user has access to project (SUPER_ADMIN sees all, others need membership)
@@ -684,13 +720,62 @@ app.delete("/api/requests/:id", async (c) => {
 // --- Comments ---
 app.get("/api/requests/:id/comments", async (c) => {
   const db = getDb(c);
-  return c.json(await db.select().from(schema.comments).where(eq(schema.comments.clientRequestId, c.req.param("id"))));
+  const rows = await db.select().from(schema.comments).where(eq(schema.comments.clientRequestId, c.req.param("id")));
+  const authorIds = Array.from(new Set(rows.map((r) => r.authorId)));
+  const users = authorIds.length
+    ? await Promise.all(authorIds.map(async (uid) => {
+        const [u] = await db.select().from(schema.users).where(eq(schema.users.id, uid));
+        return u;
+      }))
+    : [];
+  const authorMap = new Map<string, { name: string; role: string }>();
+  for (const u of users) if (u) authorMap.set(u.id, { name: u.name, role: u.role });
+  const enriched = rows.map((r) => ({
+    ...r,
+    authorName: authorMap.get(r.authorId)?.name ?? null,
+    authorRole: authorMap.get(r.authorId)?.role ?? null,
+  }));
+  return c.json(enriched);
 });
 
 app.post("/api/requests/:id/comments", async (c) => {
   const db = getDb(c);
   const [comment] = await db.insert(schema.comments).values({ ...(await c.req.json()), clientRequestId: c.req.param("id"), authorId: c.get("userId") }).returning();
   return c.json(comment);
+});
+
+app.patch("/api/comments/:id", async (c) => {
+  const db = getDb(c);
+  const user = await getCurrentUser(c);
+  if (!user) return c.json({ message: "사용자를 찾을 수 없습니다" }, 404);
+  const [existing] = await db.select().from(schema.comments).where(eq(schema.comments.id, c.req.param("id")));
+  if (!existing) return c.json({ message: "댓글을 찾을 수 없습니다" }, 404);
+  const canManage = user.role === "SUPER_ADMIN" || user.role === "PM";
+  if (!canManage && existing.authorId !== user.id) {
+    return c.json({ message: "댓글을 수정할 권한이 없습니다" }, 403);
+  }
+  const body = await c.req.json();
+  const content = typeof body.content === "string" ? body.content.trim() : "";
+  if (!content) return c.json({ message: "댓글 내용을 입력해주세요" }, 400);
+  const [updated] = await db.update(schema.comments)
+    .set({ content, updatedAt: new Date().toISOString() })
+    .where(eq(schema.comments.id, c.req.param("id")))
+    .returning();
+  return c.json(updated);
+});
+
+app.delete("/api/comments/:id", async (c) => {
+  const db = getDb(c);
+  const user = await getCurrentUser(c);
+  if (!user) return c.json({ message: "사용자를 찾을 수 없습니다" }, 404);
+  const [existing] = await db.select().from(schema.comments).where(eq(schema.comments.id, c.req.param("id")));
+  if (!existing) return c.json({ message: "댓글을 찾을 수 없습니다" }, 404);
+  const canManage = user.role === "SUPER_ADMIN" || user.role === "PM";
+  if (!canManage && existing.authorId !== user.id) {
+    return c.json({ message: "댓글을 삭제할 권한이 없습니다" }, 403);
+  }
+  await db.delete(schema.comments).where(eq(schema.comments.id, c.req.param("id")));
+  return c.json({ ok: true });
 });
 
 // --- Design Changes ---
